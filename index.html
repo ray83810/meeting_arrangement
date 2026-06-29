@@ -116,21 +116,23 @@
                 </div>
 
                 <div class="submit-buttons-container">
-                    <button type="submit" id="submit-btn" class="primary-btn">
-                        <span>重新安排</span>
-                        <i class="fa-solid fa-wand-magic-sparkles"></i>
-                    </button>
-                    <div class="sub-buttons-row">
-                        <button type="button" id="append-btn" class="secondary-btn" disabled title="在目前排程的基礎上，追加安排新時長或新客服同仁的會議/課程">
-                            <span>追加</span>
+                    <div class="buttons-row">
+                        <button type="submit" id="submit-btn" class="primary-btn" title="清除所有已排定的會議，重新進行安排">
+                            <span>重新安排</span>
+                            <i class="fa-solid fa-wand-magic-sparkles"></i>
+                        </button>
+                        <button type="button" id="append-btn" class="secondary-btn" disabled title="在目前排定的基礎上，追加安排新會議">
+                            <span>追加安排</span>
                             <i class="fa-solid fa-plus"></i>
                         </button>
+                    </div>
+                    <div class="buttons-row">
                         <button type="button" id="undo-btn" class="undo-btn" disabled title="回退到上一次的排程狀態">
-                            <span>復原</span>
+                            <span>復原上一步</span>
                             <i class="fa-solid fa-rotate-left"></i>
                         </button>
-                        <button type="button" id="clear-btn" class="clear-btn" disabled title="清空所有已安排的會議/課程紀錄">
-                            <span>清空</span>
+                        <button type="button" id="clear-btn" class="clear-btn" disabled title="清空所有已安排的會議紀錄">
+                            <span>清空所有</span>
                             <i class="fa-solid fa-trash-can"></i>
                         </button>
                     </div>

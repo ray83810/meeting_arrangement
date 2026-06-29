@@ -268,6 +268,9 @@ document.addEventListener("DOMContentLoaded", () => {
                 undoBtn.disabled = true;
                 undoBtn.style.opacity = "0.5";
                 undoBtn.style.cursor = "not-allowed";
+                clearBtn.disabled = true;
+                clearBtn.style.opacity = "0.5";
+                clearBtn.style.cursor = "not-allowed";
                 
                 initData = {
                     dates: validDates,
@@ -368,6 +371,11 @@ document.addEventListener("DOMContentLoaded", () => {
         undoSchedule();
     });
 
+    // Clear action
+    clearBtn.addEventListener("click", () => {
+        clearSchedule();
+    });
+
     // Export CSV
     exportCsvBtn.addEventListener("click", exportToCSV);
 
@@ -382,6 +390,18 @@ document.addEventListener("DOMContentLoaded", () => {
         submitBtn.style.opacity = "0.5";
         submitBtn.style.cursor = "not-allowed";
         submitBtn.style.boxShadow = "none";
+
+        appendBtn.disabled = true;
+        appendBtn.style.opacity = "0.5";
+        appendBtn.style.cursor = "not-allowed";
+
+        undoBtn.disabled = true;
+        undoBtn.style.opacity = "0.5";
+        undoBtn.style.cursor = "not-allowed";
+
+        clearBtn.disabled = true;
+        clearBtn.style.opacity = "0.5";
+        clearBtn.style.cursor = "not-allowed";
     }
 
     function toggleAllCheckboxes(checked) {

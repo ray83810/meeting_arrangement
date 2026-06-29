@@ -1533,27 +1533,22 @@ select:focus {
 .submit-buttons-container {
     display: flex;
     flex-direction: column;
-    margin-top: 8px;
-    width: 100%;
-}
-
-.submit-buttons-container .primary-btn {
-    width: 100%;
-    margin-top: 0;
-}
-
-.sub-buttons-row {
-    display: flex;
     gap: 8px;
     margin-top: 8px;
     width: 100%;
 }
 
-.sub-buttons-row button {
+.buttons-row {
+    display: flex;
+    gap: 8px;
+    width: 100%;
+}
+
+.buttons-row button {
     flex: 1;
     min-width: 0;
-    padding: 10px 4px;
-    font-size: 13px;
+    padding: 12px 6px;
+    font-size: 14px;
     font-weight: 600;
     border-radius: 8px;
     cursor: not-allowed;
@@ -1566,7 +1561,7 @@ select:focus {
     white-space: nowrap;
 }
 
-.sub-buttons-row button:not(:disabled) {
+.buttons-row button:not(:disabled) {
     cursor: pointer;
     opacity: 1;
 }
