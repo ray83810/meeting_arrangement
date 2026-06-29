@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>客服人員課程/會議安排工具</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar Controls -->
+        <aside class="sidebar">
+            <div class="brand">
+                <i class="fa-solid fa-calendar-check brand-icon"></i>
+                <div class="brand-text">
+                    <h1>Asurion</h1>
+                    <span>課程/會議排程管理系統</span>
+                </div>
+            </div>
+            <!-- Upload Schedule File -->
+            <div class="upload-section">
+                <label class="upload-label"><i class="fa-solid fa-file-excel"></i> 上傳班表 Excel</label>
+                <input type="file" id="file-input" accept=".xlsx" style="display: none;">
+                <div class="upload-dropzone" id="upload-zone">
+                    <div class="upload-zone-content">
+                        <i class="fa-solid fa-cloud-arrow-up"></i>
+                        <span id="file-name-text">點選或拖曳檔案上傳</span>
+                    </div>
+                </div>
+                <div id="upload-status" class="upload-status"></div>
+            </div>
+
+            <div class="sidebar-divider"></div>
+            
+            <form id="schedule-form" class="control-form">
+                <div class="form-group" id="loaded-month-group" style="display: none;">
+                    <label><i class="fa-solid fa-calendar-days"></i> 目前上傳班表月份</label>
+                    <div class="loaded-month-badge" id="loaded-month-badge">
+                        <i class="fa-solid fa-circle-check" style="color: var(--success); font-size: 14px;"></i>
+                        <span id="loaded-month-val" style="font-weight: 700; color: #fff; font-size: 14px; margin-left: 6px;">-</span>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label><i class="fa-solid fa-users-gear"></i> 選擇客服人員</label>
+                    <div class="agent-selection-header">
+                        <button type="button" id="select-all-btn" class="text-btn">全選</button>
+                        <span class="divider">|</span>
+                        <button type="button" id="deselect-all-btn" class="text-btn">清除</button>
+                    </div>
+                    <div class="agent-list-scroll">
+                        <div id="agent-checkboxes" class="checkbox-group">
+                            <!-- Populated dynamically -->
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="course-count-input"><i class="fa-solid fa-list-ol"></i> 當月安排課程/會議數量 (每人)</label>
+                    <div class="number-input-wrapper">
+                        <input type="number" id="course-count-input" min="1" max="15" value="1" required>
+                        <div class="num-nav">
+                            <div class="num-button up"><i class="fa-solid fa-chevron-up"></i></div>
+                            <div class="num-button down"><i class="fa-solid fa-chevron-down"></i></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label><i class="fa-solid fa-hourglass-half"></i> 課程/會議時長</label>
+                    <div class="radio-group-tile">
+                        <label class="radio-tile-label">
+                            <input type="radio" name="course-duration" value="1" class="radio-tile-input">
+                            <div class="radio-tile">
+                                <span class="tile-title">1 小時</span>
+                            </div>
+                        </label>
+                        <label class="radio-tile-label">
+                            <input type="radio" name="course-duration" value="2" class="radio-tile-input" checked>
+                            <div class="radio-tile">
+                                <span class="tile-title">2 小時</span>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label><i class="fa-solid fa-users"></i> 安排模式</label>
+                    <div class="toggle-group-custom">
+                        <label class="checkbox-container-custom">
+                            <input type="checkbox" id="joint-class-checkbox">
+                            <span class="checkbox-custom-box"></span>
+                            <span class="checkbox-label-text">多人同時上課 (共同會議模式)</span>
+                        </label>
+                    </div>
+                    <span class="help-text">勾選：所有人同一時段上課。未勾選：每人分別獨立安排課程/會議。</span>
+                </div>
+                <div class="form-group">
+                    <label for="coverage-select"><i class="fa-solid fa-shield-halved"></i> 最低在線人數限制</label>
+                    <span class="help-text">排除上課人員後，線上須維持之客服人數</span>
+                    <div class="select-wrapper">
+                        <select id="coverage-select" required>
+                            <option value="1">至少 1 位</option>
+                            <option value="2" selected>至少 2 位 (建議)</option>
+                            <option value="3">至少 3 位</option>
+                        </select>
+                    </div>
+                </div>
+
+                <button type="submit" id="submit-btn" class="primary-btn">
+                    <span>開始安排課程/會議</span>
+                    <i class="fa-solid fa-wand-magic-sparkles"></i>
+                </button>
+            </form>
+        </aside>
+
+        <!-- Main Workspace -->
+        <main class="main-content">
+            <!-- Header -->
+            <header class="workspace-header">
+                <div class="welcome-section">
+                    <h2>智慧課程/會議安排工具</h2>
+                    <p id="current-config-summary">請先在左側設定排課/會議條件，並點選「開始安排課程/會議」</p>
+                </div>
+                <div class="theme-toggle-status">
+                    <div class="status-indicator">
+                        <span class="pulse-dot"></span>
+                        <span class="status-text">系統連線正常</span>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Dashboard Stats (Hidden initially, shown after schedule calculation) -->
+            <section id="stats-section" class="stats-grid hidden">
+                <div class="stat-card">
+                    <div class="stat-icon-wrapper blue">
+                        <i class="fa-solid fa-book-open"></i>
+                    </div>
+                    <div class="stat-info">
+                        <span class="stat-label">已排定課程/會議總次數</span>
+                        <h3 id="stat-total-courses">-</h3>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon-wrapper purple">
+                        <i class="fa-solid fa-clock"></i>
+                    </div>
+                    <div class="stat-info">
+                        <span class="stat-label">總培訓時數</span>
+                        <h3 id="stat-total-hours">-</h3>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon-wrapper teal">
+                        <i class="fa-solid fa-user-shield"></i>
+                    </div>
+                    <div class="stat-info">
+                        <span class="stat-label">平均最少在線人力</span>
+                        <h3 id="stat-min-coverage">-</h3>
+                    </div>
+                </div>
+                <div class="stat-card" id="warning-stat-card">
+                    <div class="stat-icon-wrapper orange">
+                        <i class="fa-solid fa-triangle-exclamation"></i>
+                    </div>
+                    <div class="stat-info">
+                        <span class="stat-label">人力警告時段</span>
+                        <h3 id="stat-warnings">-</h3>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Main Interactive Tabs -->
+            <div class="tab-container">
+                <div class="tab-header-wrapper">
+                    <div class="tab-header">
+                        <button class="tab-btn active" data-tab="calendar-tab">
+                            <i class="fa-solid fa-calendar-days"></i> 月曆檢視
+                        </button>
+                        <button class="tab-btn" data-tab="heatmap-tab">
+                            <i class="fa-solid fa-fire"></i> 人力覆蓋熱力圖
+                        </button>
+                        <button class="tab-btn" data-tab="list-tab">
+                            <i class="fa-solid fa-list-check"></i> 排課結果清單
+                        </button>
+                    </div>
+                </div>
+
+                <div class="tab-content-container">
+                    <!-- Loading Overlay -->
+                    <div id="loading-overlay" class="overlay hidden">
+                        <div class="loader-container">
+                            <div class="spinner"></div>
+                            <p>智慧排課引擎計算中，請稍候...</p>
+                        </div>
+                    </div>
+
+                    <!-- Empty State -->
+                    <div id="empty-state" class="empty-state-view">
+                        <div class="empty-icon"><i class="fa-solid fa-calendar-plus"></i></div>
+                        <h3>尚未生成排課表</h3>
+                        <p>請設定左方面板中的參數（月份、人員、堂數等），並點擊「開始安排課程/會議」來生成當月課程/會議排表。</p>
+                    </div>
+
+                    <!-- Tab 1: Calendar View -->
+                    <div id="calendar-tab" class="tab-panel active hidden">
+                        <div class="calendar-layout">
+                            <div class="calendar-main">
+                                <div class="calendar-nav">
+                                    <h4 id="calendar-month-title">2026年 6月</h4>
+                                    <div class="calendar-legend">
+                                        <span class="legend-item"><span class="legend-color scheduled"></span>已排課</span>
+                                        <span class="legend-item"><span class="legend-color warning"></span>低人力警示</span>
+                                    </div>
+                                </div>
+                                <div class="calendar-grid-header">
+                                    <span>週日</span><span>週一</span><span>週二</span><span>週三</span><span>週四</span><span>週五</span><span>週六</span>
+                                </div>
+                                <div id="calendar-grid" class="calendar-grid">
+                                    <!-- Populated dynamically -->
+                                </div>
+                            </div>
+                            <!-- Side Detail Panel -->
+                            <div class="calendar-side-panel">
+                                <div id="day-detail-empty" class="side-panel-empty">
+                                    <i class="fa-solid fa-arrow-left"></i>
+                                    <p>點選月曆中的日期以查看當天值班詳情與課程/會議安排</p>
+                                </div>
+                                <div id="day-detail-content" class="side-panel-content hidden">
+                                    <div class="panel-header">
+                                        <h4 id="selected-date-title">2026-06-01</h4>
+                                        <span id="selected-date-weekday" class="badge">星期一</span>
+                                    </div>
+                                    
+                                    <div class="detail-section">
+                                        <h5><i class="fa-solid fa-graduation-cap"></i> 當日課程/會議安排</h5>
+                                        <div id="day-courses-list" class="courses-timeline-list">
+                                            <!-- Dynamically filled -->
+                                        </div>
+                                    </div>
+
+                                    <div class="detail-section">
+                                        <h5><i class="fa-solid fa-users"></i> 當日每小時在線人數</h5>
+                                        <div class="timeline-visual-container">
+                                            <div id="day-coverage-timeline" class="hourly-bar-chart">
+                                                <!-- Dynamically filled -->
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tab 2: Heatmap View -->
+                    <div id="heatmap-tab" class="tab-panel hidden">
+                        <div class="heatmap-container-box">
+                            <div class="heatmap-header">
+                                <div class="heatmap-desc">
+                                    <h4>在線客服人數覆蓋率熱力圖</h4>
+                                    <p>網格顯示每日每小時線上服務的客服人數，以顏色深淺代表在線人力多寡，若低於限制人數將顯示為警告色（黃/橘/紅）。</p>
+                                </div>
+                                <div class="heatmap-controls">
+                                    <div class="btn-group">
+                                        <button id="toggle-heatmap-before" class="btn btn-secondary active">排課前在線</button>
+                                        <button id="toggle-heatmap-after" class="btn btn-secondary">排課後在線 (實際服務)</button>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="heatmap-wrapper">
+                                <div class="heatmap-legend">
+                                    <span class="legend-title">在線客服人數：</span>
+                                    <span class="legend-color-box c-0">0人 (中斷)</span>
+                                    <span class="legend-color-box c-1">1人 (吃緊)</span>
+                                    <span class="legend-color-box c-2">2人</span>
+                                    <span class="legend-color-box c-3">3人</span>
+                                    <span class="legend-color-box c-4">4人以上 (充裕)</span>
+                                </div>
+                                
+                                <div class="heatmap-scroll-area">
+                                    <div class="heatmap-grid-container">
+                                        <div class="heatmap-y-axis">
+                                            <div class="axis-header-cell">日期</div>
+                                            <!-- Dates filled dynamically -->
+                                        </div>
+                                        <div class="heatmap-main-grid">
+                                            <div class="heatmap-x-axis">
+                                                <!-- Hours 0..23 filled dynamically -->
+                                            </div>
+                                            <div id="heatmap-cells" class="heatmap-cells-grid">
+                                                <!-- Cells filled dynamically -->
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tab 3: List View -->
+                    <div id="list-tab" class="tab-panel hidden">
+                        <div class="list-container-box">
+                            <div class="list-header">
+                                <h4>當月課程/會議表清單</h4>
+                                <div class="list-actions">
+                                    <button id="export-csv-btn" class="secondary-btn">
+                                        <i class="fa-solid fa-file-csv"></i> 匯出 CSV 檔
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div class="table-wrapper">
+                                <table class="schedule-table">
+                                    <thead>
+                                        <tr>
+                                            <th>日期</th>
+                                            <th>客服人員</th>
+                                            <th>上課時段</th>
+                                            <th>課程/會議長度</th>
+                                            <th>上課時在線人數 (扣除上課同仁)</th>
+                                            <th>狀態</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="schedule-table-body">
+                                        <!-- Dynamically filled -->
+                                    </tbody>
+                                </table>
+                            </div>
+                            
+                            <div id="failed-courses-section" class="failed-courses-box hidden">
+                                <h5><i class="fa-solid fa-triangle-exclamation"></i> 無法安排的課程/會議：</h5>
+                                <p>以下人員的課程/會議因班表限制及人力覆蓋率衝突，無法在安全在線門檻下完成排課：</p>
+                                <ul id="failed-courses-list">
+                                    <!-- Filled dynamically -->
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </main>
+    </div>
+    <!-- Custom JS -->
+    <script src="/static/js/main.js"></script>
+</body>
+</html>

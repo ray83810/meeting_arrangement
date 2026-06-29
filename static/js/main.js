@@ -1,0 +1,814 @@
+document.addEventListener("DOMContentLoaded", () => {
+    // State management
+    let initData = { months: [], agents: [] };
+    let scheduleResult = null;
+    let selectedDate = null;
+    let activeHeatmapMode = "after"; // "before" or "after"
+    let uploadedMonthCode = null;
+
+    // DOM Elements
+    const loadedMonthGroup = document.getElementById("loaded-month-group");
+    const loadedMonthVal = document.getElementById("loaded-month-val");
+    const submitBtn = document.getElementById("submit-btn");
+    
+    const agentCheckboxes = document.getElementById("agent-checkboxes");
+    const selectAllBtn = document.getElementById("select-all-btn");
+    const deselectAllBtn = document.getElementById("deselect-all-btn");
+    const courseCountInput = document.getElementById("course-count-input");
+    const jointClassCheckbox = document.getElementById("joint-class-checkbox");
+    const scheduleForm = document.getElementById("schedule-form");
+    
+    // Num input nav
+    const numUp = document.querySelector(".num-nav .up");
+    const numDown = document.querySelector(".num-nav .down");
+
+    // Tab buttons and panels
+    const tabButtons = document.querySelectorAll(".tab-btn");
+    const tabPanels = document.querySelectorAll(".tab-panel");
+    const emptyState = document.getElementById("empty-state");
+    const statsSection = document.getElementById("stats-section");
+    const loadingOverlay = document.getElementById("loading-overlay");
+
+    // Calendar Elements
+    const calendarGrid = document.getElementById("calendar-grid");
+    const calendarMonthTitle = document.getElementById("calendar-month-title");
+    const dayDetailEmpty = document.getElementById("day-detail-empty");
+    const dayDetailContent = document.getElementById("day-detail-content");
+    const selectedDateTitle = document.getElementById("selected-date-title");
+    const selectedDateWeekday = document.getElementById("selected-date-weekday");
+    const dayCoursesList = document.getElementById("day-courses-list");
+    const dayCoverageTimeline = document.getElementById("day-coverage-timeline");
+
+    // Heatmap Elements
+    const heatmapCells = document.getElementById("heatmap-cells");
+    const toggleHeatmapBefore = document.getElementById("toggle-heatmap-before");
+    const toggleHeatmapAfter = document.getElementById("toggle-heatmap-after");
+
+    // List Elements
+    const scheduleTableBody = document.getElementById("schedule-table-body");
+    const failedCoursesSection = document.getElementById("failed-courses-section");
+    const failedCoursesList = document.getElementById("failed-courses-list");
+    const exportCsvBtn = document.getElementById("export-csv-btn");
+
+    // Upload Elements
+    const uploadZone = document.getElementById("upload-zone");
+    const fileInput = document.getElementById("file-input");
+    const fileNameText = document.getElementById("file-name-text");
+    const uploadStatus = document.getElementById("upload-status");
+
+    // Initialize application data in upload-only mode
+    initUploadOnlyMode();
+
+    // Event Listeners - Checkbox select controls
+    selectAllBtn.addEventListener("click", () => toggleAllCheckboxes(true));
+    deselectAllBtn.addEventListener("click", () => toggleAllCheckboxes(false));
+
+    // Event Listeners - Number input up/down
+    numUp.addEventListener("click", () => {
+        courseCountInput.stepUp();
+    });
+    numDown.addEventListener("click", () => {
+        courseCountInput.stepDown();
+    });
+
+    // Upload interactions
+    uploadZone.addEventListener("click", () => fileInput.click());
+    
+    fileInput.addEventListener("change", (e) => {
+        if (fileInput.files.length > 0) {
+            handleFileUpload(fileInput.files[0]);
+        }
+    });
+
+    // Drag and drop setup
+    ["dragenter", "dragover"].forEach(eventName => {
+        uploadZone.addEventListener(eventName, (e) => {
+            e.preventDefault();
+            uploadZone.classList.add("dragover");
+        }, false);
+    });
+
+    ["dragleave", "drop"].forEach(eventName => {
+        uploadZone.addEventListener(eventName, (e) => {
+            e.preventDefault();
+            uploadZone.classList.remove("dragover");
+        }, false);
+    });
+
+    uploadZone.addEventListener("drop", (e) => {
+        const dt = e.dataTransfer;
+        const files = dt.files;
+        if (files.length > 0) {
+            handleFileUpload(files[0]);
+        }
+    });
+
+    function handleFileUpload(file) {
+        if (!file.name.endsWith(".xlsx")) {
+            showUploadStatus("僅支援 .xlsx 格式的 Excel 檔案！", "error");
+            return;
+        }
+
+        fileNameText.textContent = file.name;
+        showUploadStatus("正在上傳並解析檔案...", "loading");
+
+        const formData = new FormData();
+        formData.append("file", file);
+
+        fetch("/api/upload", {
+            method: "POST",
+            body: formData
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.error) {
+                showUploadStatus(data.error, "error");
+            } else {
+                showUploadStatus("班表上傳並解析成功！", "success");
+                
+                // Store month code
+                uploadedMonthCode = data.month_code;
+                
+                // Show month badge
+                loadedMonthVal.textContent = data.message;
+                loadedMonthGroup.style.display = "block";
+                
+                // Enable submit button
+                submitBtn.disabled = false;
+                submitBtn.style.opacity = "1";
+                submitBtn.style.cursor = "pointer";
+                submitBtn.style.boxShadow = "0 4px 12px rgba(13, 148, 136, 0.3)";
+                
+                // Populate Agents Checklist directly from uploaded file agents list
+                agentCheckboxes.innerHTML = "";
+                data.agents.forEach(agent => {
+                    const label = document.createElement("label");
+                    label.className = "checkbox-label";
+                    
+                    const input = document.createElement("input");
+                    input.type = "checkbox";
+                    input.name = "agents";
+                    input.value = agent;
+                    input.checked = true; // Select all by default
+                    
+                    label.appendChild(input);
+                    label.appendChild(document.createTextNode(" " + agent));
+                    agentCheckboxes.appendChild(label);
+                });
+            }
+        })
+        .catch(err => {
+            console.error("Error uploading file:", err);
+            showUploadStatus("上傳失敗，請確認伺服器連線正常。", "error");
+        });
+    }
+
+    function showUploadStatus(msg, type) {
+        uploadStatus.className = "upload-status " + type;
+        uploadStatus.textContent = msg;
+    }
+
+    // Tab switching
+    tabButtons.forEach(btn => {
+        btn.addEventListener("click", () => {
+            const targetTab = btn.getAttribute("data-tab");
+            
+            tabButtons.forEach(b => b.classList.remove("active"));
+            btn.classList.add("active");
+
+            tabPanels.forEach(panel => {
+                panel.classList.add("hidden");
+            });
+
+            if (scheduleResult) {
+                document.getElementById(targetTab).classList.remove("hidden");
+            } else {
+                emptyState.classList.remove("hidden");
+            }
+        });
+    });
+
+    // Heatmap mode toggles
+    toggleHeatmapBefore.addEventListener("click", () => {
+        toggleHeatmapBefore.classList.add("active");
+        toggleHeatmapAfter.classList.remove("active");
+        activeHeatmapMode = "before";
+        renderHeatmap();
+    });
+
+    toggleHeatmapAfter.addEventListener("click", () => {
+        toggleHeatmapAfter.classList.add("active");
+        toggleHeatmapBefore.classList.remove("active");
+        activeHeatmapMode = "after";
+        renderHeatmap();
+    });
+
+    // Form submission for schedule calculation
+    scheduleForm.addEventListener("submit", (e) => {
+        e.preventDefault();
+        calculateSchedule();
+    });
+
+    // Export CSV
+    exportCsvBtn.addEventListener("click", exportToCSV);
+
+
+    // Initialize upload-only mode view
+    function initUploadOnlyMode() {
+        // Show placeholder in checklist
+        agentCheckboxes.innerHTML = '<div class="help-text" style="padding: 10px 0; color: var(--text-muted);"><i class="fa-solid fa-circle-info"></i> 請先上傳班表 Excel 檔案以載入客服同仁名單。</div>';
+        
+        // Disable submit button by default
+        submitBtn.disabled = true;
+        submitBtn.style.opacity = "0.5";
+        submitBtn.style.cursor = "not-allowed";
+        submitBtn.style.boxShadow = "none";
+    }
+
+    function toggleAllCheckboxes(checked) {
+        const checkboxes = document.querySelectorAll("#agent-checkboxes input");
+        checkboxes.forEach(cb => {
+            cb.checked = checked;
+        });
+    }
+
+    // Submit scheduling criteria to API
+    function calculateSchedule() {
+        const selectedMonth = uploadedMonthCode;
+        if (!selectedMonth) {
+            alert("請先上傳班表 Excel 檔案！");
+            return;
+        }
+        const selectedAgents = Array.from(document.querySelectorAll("#agent-checkboxes input:checked")).map(cb => cb.value);
+        const courseCount = parseInt(courseCountInput.value);
+        const courseDuration = parseInt(document.querySelector('input[name="course-duration"]:checked').value);
+        const minCoverage = parseInt(document.getElementById("coverage-select").value);
+
+        if (selectedAgents.length === 0) {
+            alert("請至少選擇一位客服人員！");
+            return;
+        }
+
+        // Show loading state
+        loadingOverlay.classList.remove("hidden");
+        emptyState.classList.add("hidden");
+
+        fetch("/api/schedule", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                month: selectedMonth,
+                agents: selectedAgents,
+                course_count: courseCount,
+                course_duration: courseDuration,
+                min_coverage: minCoverage,
+                joint_class: jointClassCheckbox.checked
+            })
+        })
+            .then(res => {
+                if (!res.ok) {
+                    return res.json().then(err => { throw new Error(err.error || "計算出錯"); });
+                }
+                return res.json();
+            })
+            .then(result => {
+                scheduleResult = result;
+                
+                // Hide loader and empty state
+                loadingOverlay.classList.add("hidden");
+                
+                // Update workspace header label
+                const monthLabel = loadedMonthVal.textContent;
+                const modeText = jointClassCheckbox.checked ? "共同會議" : "獨立安排";
+                document.getElementById("current-config-summary").textContent = 
+                    `${monthLabel} 班表 | ${modeText} | 已選人員: ${selectedAgents.length}位 | 數量: ${courseCount}次 (${courseDuration}小時) | 安全在線門檻: ${minCoverage}位`;
+
+                // Display active panels
+                statsSection.classList.remove("hidden");
+                
+                const activeTab = document.querySelector(".tab-btn.active").getAttribute("data-tab");
+                tabPanels.forEach(panel => panel.classList.add("hidden"));
+                document.getElementById(activeTab).classList.remove("hidden");
+
+                // Clear side details
+                selectedDate = null;
+                dayDetailEmpty.classList.remove("hidden");
+                dayDetailContent.classList.add("hidden");
+
+                // Render metrics and panels
+                renderStats(minCoverage);
+                renderCalendar(selectedMonth);
+                renderHeatmap();
+                renderTable();
+            })
+            .catch(err => {
+                loadingOverlay.classList.add("hidden");
+                emptyState.classList.remove("hidden");
+                statsSection.classList.add("hidden");
+                tabPanels.forEach(panel => panel.classList.add("hidden"));
+                alert("錯誤: " + err.message);
+            });
+    }
+
+    // Render Stats Section
+    function renderStats(minCoverageThreshold) {
+        let totalCourses = 0;
+        let totalHours = 0;
+        let warningsCount = 0;
+        let coverages = [];
+
+        Object.keys(scheduleResult.scheduled_courses).forEach(agent => {
+            const list = scheduleResult.scheduled_courses[agent];
+            totalCourses += list.length;
+            list.forEach(c => {
+                totalHours += c.duration;
+                if (c.violated) {
+                    warningsCount++;
+                }
+                coverages.push(...c.coverage_at_hours);
+            });
+        });
+
+        // Find average minimum remaining coverage
+        let sumMin = 0;
+        let dayCount = 0;
+        Object.keys(scheduleResult.coverage_timeline).forEach(date => {
+            let dayMin = 99;
+            let activeHours = false;
+            scheduleResult.coverage_timeline[date].forEach(h => {
+                // Only count hours where anyone was online before training
+                if (h.before > 0) {
+                    dayMin = Math.min(dayMin, h.after);
+                    activeHours = true;
+                }
+            });
+            if (activeHours) {
+                sumMin += dayMin;
+                dayCount++;
+            }
+        });
+
+        const avgMinCoverage = dayCount > 0 ? (sumMin / dayCount).toFixed(1) : 0;
+
+        document.getElementById("stat-total-courses").textContent = `${totalCourses} 次`;
+        document.getElementById("stat-total-hours").textContent = `${totalHours} 小時`;
+        document.getElementById("stat-min-coverage").textContent = `${avgMinCoverage} 位`;
+        
+        const warningCard = document.getElementById("warning-stat-card");
+        const warningVal = document.getElementById("stat-warnings");
+        
+        warningVal.textContent = `${warningsCount} 個時段`;
+        if (warningsCount > 0) {
+            warningCard.style.border = "1px solid var(--danger)";
+            warningVal.style.color = "var(--danger)";
+        } else {
+            warningCard.style.border = "1px solid var(--border-color)";
+            warningVal.style.color = "#fff";
+        }
+    }
+
+    // Render Tab 1: Calendar View
+    function renderCalendar(monthCode) {
+        calendarGrid.innerHTML = "";
+        
+        const year = parseInt(monthCode.substring(0, 4));
+        const month = parseInt(monthCode.substring(4, 6));
+        
+        calendarMonthTitle.textContent = `${year}年 ${month}月`;
+
+        // First day of the month weekday
+        const firstDayDate = new Date(year, month - 1, 1);
+        const startDayIndex = firstDayDate.getDay(); // 0: Sun, 1: Mon, ...
+        
+        // Days count in month
+        const daysInMonth = new Date(year, month, 0).getDate();
+
+        // Padding empty cells before 1st of month
+        for (let i = 0; i < startDayIndex; i++) {
+            const cell = document.createElement("div");
+            cell.className = "calendar-day empty";
+            calendarGrid.appendChild(cell);
+        }
+
+        // Render days
+        for (let d = 1; d <= daysInMonth; d++) {
+            const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+            const cell = document.createElement("div");
+            cell.className = "calendar-day";
+            if (selectedDate === dateStr) {
+                cell.classList.add("selected");
+            }
+
+            // Day Number
+            const dayNum = document.createElement("div");
+            dayNum.className = "day-number";
+            dayNum.textContent = d;
+            cell.appendChild(dayNum);
+
+            // Calculate courses and warnings for this day
+            let dayCoursesCount = 0;
+            let dayHasWarning = false;
+
+            Object.keys(scheduleResult.scheduled_courses).forEach(agent => {
+                scheduleResult.scheduled_courses[agent].forEach(c => {
+                    if (c.date === dateStr) {
+                        dayCoursesCount++;
+                        if (c.violated) {
+                            dayHasWarning = true;
+                        }
+                    }
+                });
+            });
+
+            // Day Badges Container
+            const badgesContainer = document.createElement("div");
+            badgesContainer.className = "day-badges";
+
+            if (dayCoursesCount > 0) {
+                const cBadge = document.createElement("span");
+                cBadge.className = "day-badge course-badge";
+                cBadge.innerHTML = `<i class="fa-solid fa-graduation-cap"></i> ${dayCoursesCount} 堂`;
+                badgesContainer.appendChild(cBadge);
+            }
+
+            if (dayHasWarning) {
+                const wBadge = document.createElement("span");
+                wBadge.className = "day-badge warning-badge";
+                wBadge.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> 吃緊`;
+                badgesContainer.appendChild(wBadge);
+            }
+
+            cell.appendChild(badgesContainer);
+
+            // Click listener to select day
+            cell.addEventListener("click", () => {
+                document.querySelectorAll(".calendar-day").forEach(c => c.classList.remove("selected"));
+                cell.classList.add("selected");
+                selectedDate = dateStr;
+                showDayDetail(dateStr);
+            });
+
+            calendarGrid.appendChild(cell);
+        }
+        
+        // Auto-select first day containing a course
+        let autoSelected = false;
+        for (let d = 1; d <= daysInMonth; d++) {
+            const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+            let hasCourse = false;
+            Object.keys(scheduleResult.scheduled_courses).forEach(agent => {
+                if (scheduleResult.scheduled_courses[agent].some(c => c.date === dateStr)) {
+                    hasCourse = true;
+                }
+            });
+            if (hasCourse) {
+                const dayCells = calendarGrid.querySelectorAll(".calendar-day:not(.empty)");
+                const targetCell = dayCells[d - 1];
+                targetCell.click();
+                autoSelected = true;
+                break;
+            }
+        }
+        
+        if (!autoSelected && daysInMonth > 0) {
+            const dayCells = calendarGrid.querySelectorAll(".calendar-day:not(.empty)");
+            dayCells[0].click();
+        }
+    }
+
+    // Show day detail sidebar on calendar
+    function showDayDetail(dateStr) {
+        dayDetailEmpty.classList.add("hidden");
+        dayDetailContent.classList.remove("hidden");
+
+        const parsedDate = new Date(dateStr);
+        const weekdayStr = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"][parsedDate.getDay()];
+        
+        selectedDateTitle.textContent = dateStr;
+        selectedDateWeekday.textContent = weekdayStr;
+
+        // Gather all courses for this day
+        const dayCourses = [];
+        Object.keys(scheduleResult.scheduled_courses).forEach(agent => {
+            scheduleResult.scheduled_courses[agent].forEach(c => {
+                if (c.date === dateStr) {
+                    dayCourses.push({
+                        agent: agent,
+                        ...c
+                    });
+                }
+            });
+        });
+
+        // Render Day Courses list
+        dayCoursesList.innerHTML = "";
+        if (dayCourses.length === 0) {
+            dayCoursesList.innerHTML = `<div class="help-text" style="padding: 10px 0;"><i class="fa-solid fa-info-circle"></i> 當天無課程/會議安排。</div>`;
+        } else {
+            dayCourses.forEach(c => {
+                const item = document.createElement("div");
+                item.className = "course-item";
+                if (c.violated) {
+                    item.classList.add("violated-course");
+                }
+
+                const minCoverage = Math.min(...c.coverage_at_hours);
+
+                item.innerHTML = `
+                    <div class="course-item-header">
+                        <span class="course-agent">${c.agent}</span>
+                        <span class="course-time">${String(c.start_hour).padStart(2, "0")}:00 - ${String(c.end_hour).padStart(2, "0")}:00</span>
+                    </div>
+                    <div class="course-item-body">
+                        <span>時長: ${c.duration}小時</span>
+                        <span class="coverage-status-tag ${c.violated ? 'warn' : 'ok'}">
+                            ${c.violated ? '<i class="fa-solid fa-triangle-exclamation"></i> ' : ''}在線: ${minCoverage}位
+                        </span>
+                    </div>
+                `;
+                dayCoursesList.appendChild(item);
+            });
+        }
+
+        // Render Day Coverage Timeline Chart
+        dayCoverageTimeline.innerHTML = "";
+        const hourlyData = scheduleResult.coverage_timeline[dateStr] || [];
+        
+        hourlyData.forEach(h => {
+            const barWrapper = document.createElement("div");
+            barWrapper.className = "hour-bar-wrapper";
+
+            const bar = document.createElement("div");
+            bar.className = "hour-bar";
+            
+            // Determine agent count
+            const count = h.after;
+            const countBefore = h.before;
+            
+            // Set css class based on count
+            if (countBefore === 0) {
+                bar.classList.add("status-off");
+                bar.style.height = "5px";
+                bar.style.backgroundColor = "rgba(255,255,255,0.03)";
+            } else {
+                if (count === 0) {
+                    bar.classList.add("c-0");
+                } else if (count === 1) {
+                    bar.classList.add("c-1");
+                } else if (count === 2) {
+                    bar.classList.add("c-2");
+                } else if (count === 3) {
+                    bar.classList.add("c-3");
+                } else {
+                    bar.classList.add("c-4");
+                }
+            }
+
+            // Tooltip text
+            const tooltip = document.createElement("div");
+            tooltip.className = "tooltip";
+            
+            const inClassList = dayCourses
+                .filter(c => {
+                    const start = c.start_hour;
+                    const end = c.end_hour;
+                    if (start < end) {
+                        return h.hour >= start && h.hour < end;
+                    } else {
+                        // overnight cross midnight (should not happen with our single-day shifts, but safely check)
+                        return h.hour >= start || h.hour < end;
+                    }
+                })
+                .map(c => c.agent);
+
+            const inClassStr = inClassList.length > 0 ? `<br><b>上課同仁:</b> ${inClassList.join(", ")}` : "";
+            const onDutyStr = h.agents_after.length > 0 ? `<br><b>值班同仁:</b> ${h.agents_after.join(", ")}` : "<br><b>無人值班 (OFF)</b>";
+
+            tooltip.innerHTML = `
+                <strong>${String(h.hour).padStart(2, "0")}:00 - ${String(h.hour + 1).padStart(2, "0")}:00</strong><br>
+                排課前值班: ${h.before}位<br>
+                排課後在線: ${h.after}位
+                ${inClassStr}
+                ${onDutyStr}
+            `;
+            
+            const label = document.createElement("span");
+            label.className = "hour-label";
+            label.textContent = `${h.hour}h`;
+
+            barWrapper.appendChild(bar);
+            barWrapper.appendChild(tooltip);
+            barWrapper.appendChild(label);
+            
+            dayCoverageTimeline.appendChild(barWrapper);
+        });
+    }
+
+    // Render Tab 2: Heatmap
+    function renderHeatmap() {
+        heatmapCells.innerHTML = "";
+        
+        const dates = scheduleResult.dates;
+        const timeline = scheduleResult.coverage_timeline;
+
+        // Render Y-Axis dates
+        const yAxis = document.querySelector(".heatmap-y-axis");
+        // Clear previous date cells (keep header)
+        yAxis.innerHTML = '<div class="axis-header-cell">日期</div>';
+        
+        dates.forEach(d_str => {
+            const cell = document.createElement("div");
+            cell.className = "axis-cell";
+            cell.textContent = d_str.substring(5); // Show MM-DD
+            yAxis.appendChild(cell);
+        });
+
+        // Render X-Axis hours (0..23)
+        const xAxis = document.querySelector(".heatmap-x-axis");
+        xAxis.innerHTML = "";
+        for (let h = 0; h < 24; h++) {
+            const cell = document.createElement("div");
+            cell.className = "x-cell";
+            cell.textContent = `${String(h).padStart(2, "0")}`;
+            xAxis.appendChild(cell);
+        }
+
+        // Render cell rows
+        dates.forEach(d_str => {
+            const row = document.createElement("div");
+            row.className = "heatmap-row";
+            
+            const dayData = timeline[d_str] || [];
+            
+            // Gather day courses for class tooltip info
+            const dayCourses = [];
+            Object.keys(scheduleResult.scheduled_courses).forEach(agent => {
+                scheduleResult.scheduled_courses[agent].forEach(c => {
+                    if (c.date === d_str) {
+                        dayCourses.push({ agent: agent, ...c });
+                    }
+                });
+            });
+
+            dayData.forEach(h => {
+                const cell = document.createElement("div");
+                cell.className = "heatmap-cell";
+
+                const val = activeHeatmapMode === "before" ? h.before : h.after;
+                const totalOnlineBefore = h.before;
+
+                if (totalOnlineBefore === 0) {
+                    // Closed/OFF
+                    cell.classList.add("status-off");
+                } else {
+                    if (val === 0) {
+                        cell.classList.add("status-0");
+                    } else if (val === 1) {
+                        cell.classList.add("status-1");
+                    } else if (val === 2) {
+                        cell.classList.add("status-2");
+                    } else if (val === 3) {
+                        cell.classList.add("status-3");
+                    } else {
+                        cell.classList.add("status-4");
+                    }
+                }
+
+                // Tooltip
+                const tooltip = document.createElement("div");
+                tooltip.className = "tooltip";
+                
+                const inClassList = dayCourses
+                    .filter(c => h.hour >= c.start_hour && h.hour < c.end_hour)
+                    .map(c => c.agent);
+
+                const inClassStr = inClassList.length > 0 ? `<br><b>上課中:</b> ${inClassList.join(", ")}` : "";
+                const listToShow = activeHeatmapMode === "before" ? h.agents_before : h.agents_after;
+                const activeLabel = activeHeatmapMode === "before" ? "排課前值班" : "實際值勤";
+                const agentsListStr = listToShow.length > 0 ? `<br><b>值班人員:</b> ${listToShow.join(", ")}` : "<br><b>無人值勤</b>";
+
+                tooltip.innerHTML = `
+                    <strong>${d_str} ${String(h.hour).padStart(2, "0")}:00 - ${String(h.hour + 1).padStart(2, "0")}:00</strong><br>
+                    排課前值班: ${h.before}位<br>
+                    排課後在線: ${h.after}位<br>
+                    ${activeLabel}: ${val}位
+                    ${inClassStr}
+                    ${agentsListStr}
+                `;
+
+                cell.appendChild(tooltip);
+                row.appendChild(cell);
+            });
+            
+            heatmapCells.appendChild(row);
+        });
+    }
+
+    // Render Tab 3: Detailed Table List
+    function renderTable() {
+        scheduleTableBody.innerHTML = "";
+        
+        const courses = [];
+        Object.keys(scheduleResult.scheduled_courses).forEach(agent => {
+            scheduleResult.scheduled_courses[agent].forEach(c => {
+                courses.push({
+                    agent: agent,
+                    ...c
+                });
+            });
+        });
+
+        // Sort by Date, then Start Hour, then Agent Name
+        courses.sort((a, b) => {
+            if (a.date !== b.date) {
+                return a.date.localeCompare(b.date);
+            }
+            if (a.start_hour !== b.start_hour) {
+                return a.start_hour - b.start_hour;
+            }
+            return a.agent.localeCompare(b.agent);
+        });
+
+        if (courses.length === 0) {
+            scheduleTableBody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">無排課記錄</td></tr>`;
+        } else {
+            courses.forEach(c => {
+                const tr = document.createElement("tr");
+                const minCoverage = Math.min(...c.coverage_at_hours);
+                
+                tr.innerHTML = `
+                    <td class="strong">${c.date}</td>
+                    <td class="strong">${c.agent}</td>
+                    <td>${String(c.start_hour).padStart(2, "0")}:00 - ${String(c.end_hour).padStart(2, "0")}:00</td>
+                    <td>${c.duration} 小時</td>
+                    <td>${minCoverage} 位在線 (${c.coverage_at_hours.join(" -> ")})</td>
+                    <td>
+                        <span class="status-indicator-inline ${c.violated ? 'danger' : 'success'}">
+                            <i class="fa-solid ${c.violated ? 'fa-triangle-exclamation' : 'fa-circle-check'}"></i>
+                            ${c.violated ? '人力吃緊警告' : '在線人力安全'}
+                        </span>
+                    </td>
+                `;
+                scheduleTableBody.appendChild(tr);
+            });
+        }
+
+        // Render Failed Schedules (if any)
+        failedCoursesList.innerHTML = "";
+        if (scheduleResult.failed_schedules && scheduleResult.failed_schedules.length > 0) {
+            failedCoursesSection.classList.remove("hidden");
+            scheduleResult.failed_schedules.forEach(f => {
+                const li = document.createElement("li");
+                li.textContent = `${f.agent} (第 ${f.course_number} 堂)`;
+                failedCoursesList.appendChild(li);
+            });
+        } else {
+            failedCoursesSection.classList.add("hidden");
+        }
+    }
+
+    // Export Scheduled Courses to CSV
+    function exportToCSV() {
+        if (!scheduleResult) return;
+
+        const courses = [];
+        Object.keys(scheduleResult.scheduled_courses).forEach(agent => {
+            scheduleResult.scheduled_courses[agent].forEach(c => {
+                courses.push({
+                    agent: agent,
+                    ...c
+                });
+            });
+        });
+
+        courses.sort((a, b) => {
+            if (a.date !== b.date) return a.date.localeCompare(b.date);
+            return a.start_hour - b.start_hour;
+        });
+
+        // CSV Header
+        let csvContent = "\ufeff"; // BOM for excel utf-8 support
+        csvContent += "日期,客服人員,上課時段,時長(小時),最低在線客服數,狀態\n";
+
+        courses.forEach(c => {
+            const minCoverage = Math.min(...c.coverage_at_hours);
+            const statusText = c.violated ? "人力吃緊警告" : "安全在線";
+            const timeStr = `${String(c.start_hour).padStart(2, "0")}:00-${String(c.end_hour).padStart(2, "0")}:00`;
+            
+            csvContent += `"${c.date}","${c.agent}","${timeStr}",${c.duration},${minCoverage},"${statusText}"\n`;
+        });
+
+        // Trigger Download
+        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+        const link = document.createElement("a");
+        const monthLabel = loadedMonthVal.textContent.replace(" ", "_");
+        
+        link.href = URL.createObjectURL(blob);
+        link.setAttribute("download", `客服課程/會議安排表_${monthLabel}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+});
