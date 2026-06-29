@@ -7,3 +7,4 @@ temp_*.xlsx
 temp_upload.xlsx
 .vscode/
 .idea/
+~$*.xlsx
