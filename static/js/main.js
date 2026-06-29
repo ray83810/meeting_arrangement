@@ -1035,12 +1035,14 @@ document.addEventListener("DOMContentLoaded", () => {
             courses.forEach(c => {
                 const tr = document.createElement("tr");
                 const minCoverage = Math.min(...c.coverage_at_hours);
+                const mealStr = c.meal_hour !== undefined ? `${String(c.meal_hour).padStart(2, "0")}:00` : "無";
                 
                 tr.innerHTML = `
                     <td class="strong">${c.date}</td>
                     <td class="strong">${c.agent}</td>
                     <td>${String(c.start_hour).padStart(2, "0")}:00 - ${String(c.end_hour).padStart(2, "0")}:00</td>
                     <td>${c.duration} 小時</td>
+                    <td><span class="badge" style="background: rgba(13, 148, 136, 0.15); color: var(--primary); border: 1px solid rgba(13, 148, 136, 0.3); padding: 4px 8px; border-radius: 4px; font-weight: 600;">${mealStr}</span></td>
                     <td>${minCoverage} 位在線 (${c.coverage_at_hours.join(" -> ")})</td>
                     <td>
                         <span class="status-indicator-inline ${c.violated ? 'danger' : 'success'}">
@@ -1067,12 +1069,62 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
+    // Get potential meal hour options for an agent based on their shift type and name
+    function getPotentialMealHours(agentName, startHour, defaultMealHours = []) {
+        if (agentName === "Molly Song") {
+            return [17]; // Molly is fixed at 17:00
+        }
+        
+        let options = [];
+        if (startHour === 8 || startHour === 9) {
+            options = [11, 12]; // 早班 (11:00與12:00)
+        } else if (startHour === 11 || startHour === 12 || startHour === 13) {
+            options = [15, 16]; // 中班 (15:00, 15:30, 16:00 - treating 15:30 as hour 15)
+        } else if (startHour === 15) {
+            options = [18, 19]; // 晚班 (18:00, 18:30, 19:00 - treating 18:30 as hour 18)
+        } else {
+            options = [...defaultMealHours];
+        }
+        
+        // Ensure default meal hour is always one of the options
+        defaultMealHours.forEach(h => {
+            if (!options.includes(h)) {
+                options.push(h);
+            }
+        });
+        
+        return options;
+    }
+
     // Core greedy scheduling algorithm in Javascript
     function calculateScheduleJS(selectedMonth, selectedAgents, courseCount, courseDuration, minCoverage, jointClass, existingResult = null) {
         const dates = initData.dates;
         const agentsData = initData.agents;
         
-        // 1. Build onlineMatrixOrig
+        // 1. Initialize dailyMealHours state
+        const dailyMealHours = {};
+        if (existingResult && existingResult.daily_meal_hours) {
+            dates.forEach(d => {
+                dailyMealHours[d] = { ...existingResult.daily_meal_hours[d] };
+            });
+        } else {
+            dates.forEach(d => {
+                dailyMealHours[d] = {};
+                SHIFTS_ALL.forEach(a => {
+                    const agentInfo = agentsData[a];
+                    if (!agentInfo) return;
+                    const schedule = agentInfo.schedule;
+                    const cellVal = schedule[d];
+                    const startHour = getAgentShiftHours(cellVal);
+                    if (startHour !== null) {
+                        const defaultMealHours = parseMealHours(agentInfo.meal, startHour);
+                        dailyMealHours[d][a] = defaultMealHours[0]; // initialize to default meal hour
+                    }
+                });
+            });
+        }
+        
+        // 2. Build onlineMatrixOrig using actual assigned meal hour
         const onlineMatrixOrig = {};
         dates.forEach(d => {
             onlineMatrixOrig[d] = {};
@@ -1085,7 +1137,6 @@ document.addEventListener("DOMContentLoaded", () => {
             const agentInfo = agentsData[agentName];
             if (!agentInfo) return;
             const schedule = agentInfo.schedule;
-            const mealVal = agentInfo.meal;
             
             Object.keys(schedule).forEach(dStr => {
                 const cellVal = schedule[dStr];
@@ -1095,8 +1146,8 @@ document.addEventListener("DOMContentLoaded", () => {
                     for (let i = 0; i < 9; i++) {
                         shiftHours.push((startHour + i) % 24);
                     }
-                    const mealHours = parseMealHours(mealVal, startHour);
-                    const workingHours = shiftHours.filter(h => !mealHours.includes(h));
+                    const actualMealHour = dailyMealHours[dStr][agentName];
+                    const workingHours = shiftHours.filter(h => h !== actualMealHour);
                     
                     workingHours.forEach(h => {
                         if (onlineMatrixOrig[dStr] && onlineMatrixOrig[dStr][h]) {
@@ -1107,7 +1158,7 @@ document.addEventListener("DOMContentLoaded", () => {
             });
         });
         
-        // 2. Build availableAgents and scheduledCourses
+        // 3. Build availableAgents and scheduledCourses
         const availableAgents = {};
         let scheduledCourses = {};
         
@@ -1170,7 +1221,6 @@ document.addEventListener("DOMContentLoaded", () => {
                     for (let name of selectedAgents) {
                         const agentInfo = agentsData[name];
                         const schedule = agentInfo.schedule;
-                        const mealVal = agentInfo.meal;
                         const cellVal = schedule[dStr];
                         const startHour = getAgentShiftHours(cellVal);
                         if (startHour === null) {
@@ -1182,9 +1232,7 @@ document.addEventListener("DOMContentLoaded", () => {
                         for (let i = 0; i < 9; i++) {
                             shiftHours.push((startHour + i) % 24);
                         }
-                        const mealHours = parseMealHours(mealVal, startHour);
-                        const workingHours = shiftHours.filter(h => !mealHours.includes(h));
-                        workingHoursByAgent[name] = new Set(workingHours);
+                        workingHoursByAgent[name] = new Set(shiftHours);
                     }
                     
                     if (!validAgentsOnDay) continue;
@@ -1213,39 +1261,132 @@ document.addEventListener("DOMContentLoaded", () => {
                         }
                         if (!isContiguous) continue;
                         
-                        let minRemOnline = 999;
-                        let sumRemOnline = 0;
-                        let validSlot = true;
+                        // Optimize meal hours for all selected agents for this candidate slot
+                        const tempMeals = {};
+                        selectedAgents.forEach(a => {
+                            tempMeals[a] = dailyMealHours[dStr][a];
+                        });
                         
-                        for (let h of candidateHours) {
-                            for (let name of selectedAgents) {
-                                if (!availableAgents[dStr][h].has(name)) {
-                                    validSlot = false;
-                                    break;
-                                }
-                            }
-                            if (!validSlot) break;
+                        const chosenMealHoursForSlot = {};
+                        let isSlotValid = true;
+                        
+                        for (let name of selectedAgents) {
+                            const agentInfo = agentsData[name];
+                            const cellVal = agentInfo.schedule[dStr];
+                            const startHour = getAgentShiftHours(cellVal);
+                            const defaultMealHours = parseMealHours(agentInfo.meal, startHour);
+                            const P = getPotentialMealHours(name, startHour, defaultMealHours);
+                            const R = P.filter(h => !candidateHours.includes(h));
                             
-                            const activeAgents = Array.from(availableAgents[dStr][h]);
-                            const remainingCount = activeAgents.filter(a => !selectedAgents.includes(a)).length;
-                            minRemOnline = Math.min(minRemOnline, remainingCount);
-                            sumRemOnline += remainingCount;
+                            if (R.length === 0) {
+                                isSlotValid = false;
+                                break;
+                            }
+                            
+                            let bestMealHourForAgent = R[0];
+                            let bestMealScoreForAgent = -999;
+                            
+                            R.forEach(m => {
+                                tempMeals[name] = m;
+                                
+                                let minRem = 999;
+                                let sumRem = 0;
+                                
+                                for (let h = 0; h < 24; h++) {
+                                    const activeSet = availableAgents[dStr][h];
+                                    let activeCount = activeSet.size;
+                                    
+                                    selectedAgents.forEach(sa => {
+                                        let saWasOnline = activeSet.has(sa);
+                                        let saIsOnline = false;
+                                        
+                                        const saInfo = agentsData[sa];
+                                        const saCell = saInfo.schedule[dStr];
+                                        const saStart = getAgentShiftHours(saCell);
+                                        if (saStart !== null) {
+                                            const saShift = [];
+                                            for (let i = 0; i < 9; i++) {
+                                                saShift.push((saStart + i) % 24);
+                                            }
+                                            const saMeal = tempMeals[sa];
+                                            if (saShift.includes(h) && h !== saMeal && !candidateHours.includes(h)) {
+                                                saIsOnline = true;
+                                            }
+                                        }
+                                        
+                                        if (saWasOnline && !saIsOnline) {
+                                            activeCount--;
+                                        } else if (!saWasOnline && saIsOnline) {
+                                            activeCount++;
+                                        }
+                                    });
+                                    
+                                    let activeAgentsList = Array.from(activeSet);
+                                    selectedAgents.forEach(sa => {
+                                        let saWasOnline = activeSet.has(sa);
+                                        let saIsOnline = false;
+                                        
+                                        const saInfo = agentsData[sa];
+                                        const saCell = saInfo.schedule[dStr];
+                                        const saStart = getAgentShiftHours(saCell);
+                                        if (saStart !== null) {
+                                            const saShift = [];
+                                            for (let i = 0; i < 9; i++) {
+                                                saShift.push((saStart + i) % 24);
+                                            }
+                                            const saMeal = tempMeals[sa];
+                                            if (saShift.includes(h) && h !== saMeal && !candidateHours.includes(h)) {
+                                                saIsOnline = true;
+                                            }
+                                        }
+                                        
+                                        if (saWasOnline && !saIsOnline) {
+                                            activeAgentsList = activeAgentsList.filter(a => a !== sa);
+                                        } else if (!saWasOnline && saIsOnline) {
+                                            activeAgentsList.push(sa);
+                                        }
+                                    });
+                                    
+                                    const remainingCount = activeAgentsList.filter(a => !selectedAgents.includes(a)).length;
+                                    minRem = Math.min(minRem, remainingCount);
+                                    sumRem += remainingCount;
+                                }
+                                
+                                const score = minRem + (sumRem * 0.001);
+                                if (score > bestMealScoreForAgent) {
+                                    bestMealScoreForAgent = score;
+                                    bestMealHourForAgent = m;
+                                }
+                            });
+                            
+                            tempMeals[name] = bestMealHourForAgent;
+                            chosenMealHoursForSlot[name] = bestMealHourForAgent;
                         }
                         
-                        if (!validSlot) continue;
+                        if (!isSlotValid) continue;
                         
-                        const score = minRemOnline;
+                        let minRem = 999;
+                        let sumRem = 0;
                         
-                        if (bestSlot === null || score > bestScore || (Math.abs(score - bestScore) < 0.01 && sumRemOnline > bestSumOnline)) {
-                            bestSlot = { date: dStr, startHour: candidateHours[0], hours: candidateHours };
+                        candidateHours.forEach(h => {
+                            const activeAgentsList = Array.from(availableAgents[dStr][h]);
+                            const remainingCount = activeAgentsList.filter(a => !selectedAgents.includes(a)).length;
+                            minRem = Math.min(minRem, remainingCount);
+                            sumRem += remainingCount;
+                        });
+                        
+                        const score = minRem;
+                        
+                        if (bestSlot === null || score > bestScore || (Math.abs(score - bestScore) < 0.01 && sumRem > bestSumOnline)) {
+                            bestSlot = { date: dStr, startHour: candidateHours[0], hours: candidateHours, meals: { ...chosenMealHoursForSlot } };
                             bestScore = score;
-                            bestSumOnline = sumRemOnline;
+                            bestSumOnline = sumRem;
                         }
                     }
                 }
                 
                 if (bestSlot) {
-                    const { date: dStr, startHour: hStart, hours: candidateHours } = bestSlot;
+                    const { date: dStr, startHour: hStart, hours: candidateHours, meals: chosenMealHours } = bestSlot;
                     const minRemaining = Math.round(bestScore);
                     
                     selectedAgents.forEach(name => {
@@ -1255,6 +1396,7 @@ document.addEventListener("DOMContentLoaded", () => {
                             return activeAgents.filter(a => !selectedAgents.includes(a)).length;
                         });
                         const totalOnlineAtHours = candidateHours.map(h => availableAgents[dStr][h].size);
+                        const m_new = chosenMealHours[name];
                         
                         scheduledCourses[name].push({
                             date: dStr,
@@ -1264,12 +1406,21 @@ document.addEventListener("DOMContentLoaded", () => {
                             coverage_at_hours: coverageAtHours,
                             total_online_at_hours: totalOnlineAtHours,
                             violated: minRemaining < minCoverage,
-                            course_number: cNumForAgent
+                            course_number: cNumForAgent,
+                            meal_hour: m_new
                         });
+                        
+                        const m_old = dailyMealHours[dStr][name];
+                        if (m_old !== null && m_old !== undefined && !candidateHours.includes(m_old)) {
+                            availableAgents[dStr][m_old].add(name);
+                        }
+                        availableAgents[dStr][m_new].delete(name);
                         
                         candidateHours.forEach(h => {
                             availableAgents[dStr][h].delete(name);
                         });
+                        
+                        dailyMealHours[dStr][name] = m_new;
                     });
                 } else {
                     selectedAgents.forEach(name => {
@@ -1295,7 +1446,9 @@ document.addEventListener("DOMContentLoaded", () => {
                 const cNumForAgent = scheduledCourses[name].length + 1;
                 const agentInfo = agentsData[name];
                 const schedule = agentInfo.schedule;
-                const mealVal = agentInfo.meal;
+                const cellVal = schedule[dStr];
+                const startHour = getAgentShiftHours(cellVal);
+                if (startHour === null) return;
                 
                 let bestSlot = null;
                 let bestScore = -999;
@@ -1305,19 +1458,14 @@ document.addEventListener("DOMContentLoaded", () => {
                     const dayHasCourse = scheduledCourses[name].some(c => c.date === dStr);
                     if (dayHasCourse) return;
                     
-                    const cellVal = schedule[dStr];
-                    const startHour = getAgentShiftHours(cellVal);
-                    if (startHour === null) return;
-                    
                     const shiftHours = [];
                     for (let i = 0; i < 9; i++) {
                         shiftHours.push((startHour + i) % 24);
                     }
-                    const mealHours = parseMealHours(mealVal, startHour);
-                    const workingHours = shiftHours.filter(h => !mealHours.includes(h));
+                    const defaultMealHours = parseMealHours(agentInfo.meal, startHour);
                     
-                    for (let idx = 0; idx <= workingHours.length - courseDuration; idx++) {
-                        const candidateHours = workingHours.slice(idx, idx + courseDuration);
+                    for (let idx = 0; idx <= shiftHours.length - courseDuration; idx++) {
+                        const candidateHours = shiftHours.slice(idx, idx + courseDuration);
                         let isContiguous = true;
                         for (let k = 0; k < candidateHours.length - 1; k++) {
                             if ((candidateHours[k+1] - candidateHours[k] + 24) % 24 !== 1) {
@@ -1327,21 +1475,57 @@ document.addEventListener("DOMContentLoaded", () => {
                         }
                         if (!isContiguous) continue;
                         
-                        let minOtherOnline = 999;
-                        let sumOtherOnline = 0;
-                        let validSlot = true;
+                        const P = getPotentialMealHours(name, startHour, defaultMealHours);
+                        const R = P.filter(h => !candidateHours.includes(h));
                         
-                        for (let h of candidateHours) {
-                            if (!availableAgents[dStr][h].has(name)) {
-                                validSlot = false;
-                                break;
+                        if (R.length === 0) continue;
+                        
+                        let bestMealHour = R[0];
+                        let bestMealScore = -999;
+                        let bestMinOtherOnline = -999;
+                        let bestSumOtherOnline = -999;
+                        
+                        R.forEach(m => {
+                            let minOtherOnline = 999;
+                            let sumOtherOnline = 0;
+                            
+                            candidateHours.forEach(h => {
+                                const otherOnline = availableAgents[dStr][h].size - (availableAgents[dStr][h].has(name) ? 1 : 0);
+                                minOtherOnline = Math.min(minOtherOnline, otherOnline);
+                                sumOtherOnline += otherOnline;
+                            });
+                            
+                            let minDailyCoverage = 999;
+                            let sumDailyCoverage = 0;
+                            
+                            for (let h = 0; h < 24; h++) {
+                                const activeSet = availableAgents[dStr][h];
+                                let activeCount = activeSet.size;
+                                
+                                let nameIsOnline = false;
+                                if (shiftHours.includes(h) && h !== m && !candidateHours.includes(h)) {
+                                    nameIsOnline = true;
+                                }
+                                let nameWasOnline = activeSet.has(name);
+                                
+                                if (nameWasOnline && !nameIsOnline) {
+                                    activeCount--;
+                                } else if (!nameWasOnline && nameIsOnline) {
+                                    activeCount++;
+                                }
+                                
+                                minDailyCoverage = Math.min(minDailyCoverage, activeCount);
+                                sumDailyCoverage += activeCount;
                             }
-                            const otherOnline = availableAgents[dStr][h].size - 1;
-                            minOtherOnline = Math.min(minOtherOnline, otherOnline);
-                            sumOtherOnline += otherOnline;
-                        }
-                        
-                        if (!validSlot) continue;
+                            
+                            const mealScore = minDailyCoverage + (sumDailyCoverage * 0.001);
+                            if (mealScore > bestMealScore) {
+                                bestMealScore = mealScore;
+                                bestMealHour = m;
+                                bestMinOtherOnline = minOtherOnline;
+                                bestSumOtherOnline = sumOtherOnline;
+                            }
+                        });
                         
                         let coursesOnDay = 0;
                         selectedAgents.forEach(a => {
@@ -1350,18 +1534,18 @@ document.addEventListener("DOMContentLoaded", () => {
                             });
                         });
                         
-                        const score = minOtherOnline - (coursesOnDay * 0.05);
+                        const score = bestMinOtherOnline - (coursesOnDay * 0.05);
                         
-                        if (bestSlot === null || score > bestScore || (Math.abs(score - bestScore) < 0.01 && sumOtherOnline > bestSumOnline)) {
-                            bestSlot = { date: dStr, startHour: candidateHours[0], hours: candidateHours };
+                        if (bestSlot === null || score > bestScore || (Math.abs(score - bestScore) < 0.01 && bestSumOtherOnline > bestSumOnline)) {
+                            bestSlot = { date: dStr, startHour: candidateHours[0], hours: candidateHours, meal: bestMealHour };
                             bestScore = score;
-                            bestSumOnline = sumOtherOnline;
+                            bestSumOnline = bestSumOtherOnline;
                         }
                     }
                 });
                 
                 if (bestSlot) {
-                    const { date: dStr, startHour: hStart, hours: candidateHours } = bestSlot;
+                    const { date: dStr, startHour: hStart, hours: candidateHours, meal: m_new } = bestSlot;
                     const minRemaining = Math.round(bestScore);
                     
                     scheduledCourses[name].push({
@@ -1369,15 +1553,26 @@ document.addEventListener("DOMContentLoaded", () => {
                         start_hour: hStart,
                         end_hour: (hStart + courseDuration) % 24 === 0 ? 24 : (hStart + courseDuration) % 24,
                         duration: courseDuration,
-                        coverage_at_hours: candidateHours.map(h => availableAgents[dStr][h].size - 1),
+                        coverage_at_hours: candidateHours.map(h => {
+                            return availableAgents[dStr][h].size - (availableAgents[dStr][h].has(name) ? 1 : 0);
+                        }),
                         total_online_at_hours: candidateHours.map(h => availableAgents[dStr][h].size),
                         violated: minRemaining < minCoverage,
-                        course_number: cNumForAgent
+                        course_number: cNumForAgent,
+                        meal_hour: m_new
                     });
+                    
+                    const m_old = dailyMealHours[dStr][name];
+                    if (m_old !== null && m_old !== undefined && !candidateHours.includes(m_old)) {
+                        availableAgents[dStr][m_old].add(name);
+                    }
+                    availableAgents[dStr][m_new].delete(name);
                     
                     candidateHours.forEach(h => {
                         availableAgents[dStr][h].delete(name);
                     });
+                    
+                    dailyMealHours[dStr][name] = m_new;
                 } else {
                     failedSchedules.push({
                         agent: name,
@@ -1387,7 +1582,7 @@ document.addEventListener("DOMContentLoaded", () => {
             });
         }
         
-        // 3. Build coverageTimeline
+        // 4. Build coverageTimeline
         const coverageTimeline = {};
         dates.forEach(dStr => {
             const dayCoverage = [];
@@ -1411,7 +1606,8 @@ document.addEventListener("DOMContentLoaded", () => {
             coverage_timeline: coverageTimeline,
             dates: dates,
             agents: SHIFTS_ALL,
-            available_agents: availableAgents
+            available_agents: availableAgents,
+            daily_meal_hours: dailyMealHours
         };
     }
 
@@ -1436,14 +1632,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
         // CSV Header
         let csvContent = "\ufeff"; // BOM for excel utf-8 support
-        csvContent += "日期,客服人員,上課時段,時長(小時),最低在線客服數,狀態\n";
+        csvContent += "日期,客服人員,上課時段,時長(小時),當日用餐時間,最低在線客服數,狀態\n";
 
         courses.forEach(c => {
             const minCoverage = Math.min(...c.coverage_at_hours);
             const statusText = c.violated ? "人力吃緊警告" : "安全在線";
             const timeStr = `${String(c.start_hour).padStart(2, "0")}:00-${String(c.end_hour).padStart(2, "0")}:00`;
+            const mealStr = c.meal_hour !== undefined ? `${String(c.meal_hour).padStart(2, "0")}:00` : "無";
             
-            csvContent += `"${c.date}","${c.agent}","${timeStr}",${c.duration},${minCoverage},"${statusText}"\n`;
+            csvContent += `"${c.date}","${c.agent}","${timeStr}",${c.duration},"${mealStr}",${minCoverage},"${statusText}"\n`;
         });
 
         // Trigger Download
