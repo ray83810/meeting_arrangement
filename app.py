@@ -162,7 +162,7 @@ load_all_excel_schedules()
 
 @app.route('/')
 def index():
-    return render_template('index.html')
+    return send_from_directory(workspace_dir, 'index.html')
 
 @app.route('/api/init', methods=['GET'])
 def get_init_data():
