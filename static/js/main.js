@@ -10,6 +10,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const loadedMonthGroup = document.getElementById("loaded-month-group");
     const loadedMonthVal = document.getElementById("loaded-month-val");
     const submitBtn = document.getElementById("submit-btn");
+    const appendBtn = document.getElementById("append-btn");
     
     const agentCheckboxes = document.getElementById("agent-checkboxes");
     const selectAllBtn = document.getElementById("select-all-btn");
@@ -256,6 +257,11 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
                 
                 uploadedMonthCode = monthCode;
+                scheduleResult = null;
+                appendBtn.disabled = true;
+                appendBtn.style.opacity = "0.5";
+                appendBtn.style.cursor = "not-allowed";
+                
                 initData = {
                     dates: validDates,
                     agents: agentsData
@@ -342,7 +348,12 @@ document.addEventListener("DOMContentLoaded", () => {
     // Form submission for schedule calculation
     scheduleForm.addEventListener("submit", (e) => {
         e.preventDefault();
-        calculateSchedule();
+        calculateSchedule(false);
+    });
+
+    // Append calculation
+    appendBtn.addEventListener("click", () => {
+        calculateSchedule(true);
     });
 
     // Export CSV
@@ -369,7 +380,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // Submit scheduling criteria to API
-    function calculateSchedule() {
+    function calculateSchedule(isAppend = false) {
         const selectedMonth = uploadedMonthCode;
         if (!selectedMonth) {
             alert("請先上傳班表 Excel 檔案！");
@@ -392,17 +403,30 @@ document.addEventListener("DOMContentLoaded", () => {
         // Run JS Scheduler locally in browser!
         setTimeout(() => {
             try {
-                const result = calculateScheduleJS(selectedMonth, selectedAgents, courseCount, courseDuration, minCoverage, jointClassCheckbox.checked);
+                const startingResult = isAppend ? scheduleResult : null;
+                const result = calculateScheduleJS(selectedMonth, selectedAgents, courseCount, courseDuration, minCoverage, jointClassCheckbox.checked, startingResult);
                 scheduleResult = result;
                 
                 // Hide loader and empty state
                 loadingOverlay.classList.add("hidden");
                 
+                // Enable append button now that we have a scheduleResult
+                appendBtn.disabled = false;
+                appendBtn.style.opacity = "1";
+                appendBtn.style.cursor = "pointer";
+                
                 // Update workspace header label
                 const monthLabel = loadedMonthVal.textContent;
                 const modeText = jointClassCheckbox.checked ? "共同會議" : "獨立安排";
+                
+                // Calculate total scheduled sessions
+                let totalCount = 0;
+                Object.keys(scheduleResult.scheduled_courses).forEach(a => {
+                    totalCount += scheduleResult.scheduled_courses[a].length;
+                });
+                
                 document.getElementById("current-config-summary").textContent = 
-                    `${monthLabel} 班表 | ${modeText} | 已選人員: ${selectedAgents.length}位 | 數量: ${courseCount}次 (${courseDuration}小時) | 安全在線門檻: ${minCoverage}位`;
+                    `${monthLabel} 班表 | 已安排: ${totalCount}堂/次 | 安全在線門檻: ${minCoverage}位`;
 
                 // Display active panels
                 statsSection.classList.remove("hidden");
@@ -890,7 +914,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // Core greedy scheduling algorithm in Javascript
-    function calculateScheduleJS(selectedMonth, selectedAgents, courseCount, courseDuration, minCoverage, jointClass) {
+    function calculateScheduleJS(selectedMonth, selectedAgents, courseCount, courseDuration, minCoverage, jointClass, existingResult = null) {
         const dates = initData.dates;
         const agentsData = initData.agents;
         
@@ -929,19 +953,40 @@ document.addEventListener("DOMContentLoaded", () => {
             });
         });
         
-        // 2. Build availableAgents
+        // 2. Build availableAgents and scheduledCourses
         const availableAgents = {};
-        dates.forEach(d => {
-            availableAgents[d] = {};
-            for (let h = 0; h < 24; h++) {
-                availableAgents[d][h] = new Set(onlineMatrixOrig[d][h]);
-            }
-        });
+        let scheduledCourses = {};
         
-        const scheduledCourses = {};
-        selectedAgents.forEach(name => {
-            scheduledCourses[name] = [];
-        });
+        if (existingResult) {
+            // Deep copy existing scheduled courses
+            scheduledCourses = JSON.parse(JSON.stringify(existingResult.scheduled_courses));
+            selectedAgents.forEach(name => {
+                if (!scheduledCourses[name]) {
+                    scheduledCourses[name] = [];
+                }
+            });
+            
+            // Clone sets from existing available_agents
+            dates.forEach(d => {
+                availableAgents[d] = {};
+                for (let h = 0; h < 24; h++) {
+                    availableAgents[d][h] = new Set(existingResult.available_agents[d][h]);
+                }
+            });
+        } else {
+            // Initialize fresh scheduled courses
+            selectedAgents.forEach(name => {
+                scheduledCourses[name] = [];
+            });
+            
+            // Initialize fresh available agents from onlineMatrixOrig
+            dates.forEach(d => {
+                availableAgents[d] = {};
+                for (let h = 0; h < 24; h++) {
+                    availableAgents[d][h] = new Set(onlineMatrixOrig[d][h]);
+                }
+            });
+        }
         
         const failedSchedules = [];
         
@@ -1050,6 +1095,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     const minRemaining = Math.round(bestScore);
                     
                     selectedAgents.forEach(name => {
+                        const cNumForAgent = scheduledCourses[name].length + 1;
                         const coverageAtHours = candidateHours.map(h => {
                             const activeAgents = Array.from(availableAgents[dStr][h]);
                             return activeAgents.filter(a => !selectedAgents.includes(a)).length;
@@ -1063,7 +1109,8 @@ document.addEventListener("DOMContentLoaded", () => {
                             duration: courseDuration,
                             coverage_at_hours: coverageAtHours,
                             total_online_at_hours: totalOnlineAtHours,
-                            violated: minRemaining < minCoverage
+                            violated: minRemaining < minCoverage,
+                            course_number: cNumForAgent
                         });
                         
                         candidateHours.forEach(h => {
@@ -1072,9 +1119,10 @@ document.addEventListener("DOMContentLoaded", () => {
                     });
                 } else {
                     selectedAgents.forEach(name => {
+                        const cNumForAgent = scheduledCourses[name].length + 1;
                         failedSchedules.push({
                             agent: name,
-                            course_number: cNum
+                            course_number: cNumForAgent
                         });
                     });
                 }
@@ -1084,13 +1132,13 @@ document.addEventListener("DOMContentLoaded", () => {
             const placementRequests = [];
             for (let cIdx = 0; cIdx < courseCount; cIdx++) {
                 selectedAgents.forEach(name => {
-                    placementRequests.push({ agentName: name, courseNum: cIdx + 1 });
+                    placementRequests.push({ agentName: name });
                 });
             }
             
             placementRequests.forEach(req => {
                 const name = req.agentName;
-                const cNum = req.courseNum;
+                const cNumForAgent = scheduledCourses[name].length + 1;
                 const agentInfo = agentsData[name];
                 const schedule = agentInfo.schedule;
                 const mealVal = agentInfo.meal;
@@ -1169,7 +1217,8 @@ document.addEventListener("DOMContentLoaded", () => {
                         duration: courseDuration,
                         coverage_at_hours: candidateHours.map(h => availableAgents[dStr][h].size - 1),
                         total_online_at_hours: candidateHours.map(h => availableAgents[dStr][h].size),
-                        violated: minRemaining < minCoverage
+                        violated: minRemaining < minCoverage,
+                        course_number: cNumForAgent
                     });
                     
                     candidateHours.forEach(h => {
@@ -1178,7 +1227,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 } else {
                     failedSchedules.push({
                         agent: name,
-                        course_number: cNum
+                        course_number: cNumForAgent
                     });
                 }
             });
@@ -1207,7 +1256,8 @@ document.addEventListener("DOMContentLoaded", () => {
             failed_schedules: failedSchedules,
             coverage_timeline: coverageTimeline,
             dates: dates,
-            agents: SHIFTS_ALL
+            agents: SHIFTS_ALL,
+            available_agents: availableAgents
         };
     }
 
