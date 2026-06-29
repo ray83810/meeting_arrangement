@@ -120,10 +120,20 @@
                         <span>重新安排</span>
                         <i class="fa-solid fa-wand-magic-sparkles"></i>
                     </button>
-                    <button type="button" id="append-btn" class="secondary-btn" disabled>
-                        <span>追加安排</span>
-                        <i class="fa-solid fa-plus"></i>
-                    </button>
+                    <div class="sub-buttons-row">
+                        <button type="button" id="append-btn" class="secondary-btn" disabled title="在目前排程的基礎上，追加安排新時長或新客服同仁的會議/課程">
+                            <span>追加</span>
+                            <i class="fa-solid fa-plus"></i>
+                        </button>
+                        <button type="button" id="undo-btn" class="undo-btn" disabled title="回退到上一次的排程狀態">
+                            <span>復原</span>
+                            <i class="fa-solid fa-rotate-left"></i>
+                        </button>
+                        <button type="button" id="clear-btn" class="clear-btn" disabled title="清空所有已安排的會議/課程紀錄">
+                            <span>清空</span>
+                            <i class="fa-solid fa-trash-can"></i>
+                        </button>
+                    </div>
                 </div>
             </form>
         </aside>

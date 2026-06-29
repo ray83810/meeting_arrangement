@@ -2,6 +2,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // State management
     let initData = { months: [], agents: [] };
     let scheduleResult = null;
+    let scheduleHistory = [];
     let selectedDate = null;
     let activeHeatmapMode = "after"; // "before" or "after"
     let uploadedMonthCode = null;
@@ -11,6 +12,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const loadedMonthVal = document.getElementById("loaded-month-val");
     const submitBtn = document.getElementById("submit-btn");
     const appendBtn = document.getElementById("append-btn");
+    const undoBtn = document.getElementById("undo-btn");
+    const clearBtn = document.getElementById("clear-btn");
     
     const agentCheckboxes = document.getElementById("agent-checkboxes");
     const selectAllBtn = document.getElementById("select-all-btn");
@@ -258,9 +261,13 @@ document.addEventListener("DOMContentLoaded", () => {
                 
                 uploadedMonthCode = monthCode;
                 scheduleResult = null;
+                scheduleHistory = [];
                 appendBtn.disabled = true;
                 appendBtn.style.opacity = "0.5";
                 appendBtn.style.cursor = "not-allowed";
+                undoBtn.disabled = true;
+                undoBtn.style.opacity = "0.5";
+                undoBtn.style.cursor = "not-allowed";
                 
                 initData = {
                     dates: validDates,
@@ -356,6 +363,11 @@ document.addEventListener("DOMContentLoaded", () => {
         calculateSchedule(true);
     });
 
+    // Undo action
+    undoBtn.addEventListener("click", () => {
+        undoSchedule();
+    });
+
     // Export CSV
     exportCsvBtn.addEventListener("click", exportToCSV);
 
@@ -400,6 +412,15 @@ document.addEventListener("DOMContentLoaded", () => {
         loadingOverlay.classList.remove("hidden");
         emptyState.classList.add("hidden");
 
+        // Save current state to history for undo (serialize to JSON string to clone sets and nested objects)
+        scheduleHistory.push(scheduleResult ? JSON.stringify(scheduleResult) : null);
+        if (scheduleHistory.length > 15) {
+            scheduleHistory.shift();
+        }
+        undoBtn.disabled = false;
+        undoBtn.style.opacity = "1";
+        undoBtn.style.cursor = "pointer";
+
         // Run JS Scheduler locally in browser!
         setTimeout(() => {
             try {
@@ -410,14 +431,17 @@ document.addEventListener("DOMContentLoaded", () => {
                 // Hide loader and empty state
                 loadingOverlay.classList.add("hidden");
                 
-                // Enable append button now that we have a scheduleResult
+                // Enable append and clear buttons
                 appendBtn.disabled = false;
                 appendBtn.style.opacity = "1";
                 appendBtn.style.cursor = "pointer";
                 
+                clearBtn.disabled = false;
+                clearBtn.style.opacity = "1";
+                clearBtn.style.cursor = "pointer";
+                
                 // Update workspace header label
                 const monthLabel = loadedMonthVal.textContent;
-                const modeText = jointClassCheckbox.checked ? "共同會議" : "獨立安排";
                 
                 // Calculate total scheduled sessions
                 let totalCount = 0;
@@ -447,6 +471,13 @@ document.addEventListener("DOMContentLoaded", () => {
                 renderTable();
             } catch (err) {
                 console.error("Scheduling error:", err);
+                // Rollback history state since it errored
+                scheduleHistory.pop();
+                if (scheduleHistory.length === 0) {
+                    undoBtn.disabled = true;
+                    undoBtn.style.opacity = "0.5";
+                    undoBtn.style.cursor = "not-allowed";
+                }
                 loadingOverlay.classList.add("hidden");
                 emptyState.classList.remove("hidden");
                 statsSection.classList.add("hidden");
@@ -454,6 +485,109 @@ document.addEventListener("DOMContentLoaded", () => {
                 alert("錯誤: " + err.message);
             }
         }, 50);
+    }
+
+    // Restore to previous schedule state
+    function undoSchedule() {
+        if (scheduleHistory.length > 0) {
+            const prevStateStr = scheduleHistory.pop();
+            const prevState = prevStateStr ? JSON.parse(prevStateStr) : null;
+            scheduleResult = prevState;
+            
+            if (scheduleHistory.length === 0) {
+                undoBtn.disabled = true;
+                undoBtn.style.opacity = "0.5";
+                undoBtn.style.cursor = "not-allowed";
+            }
+            
+            if (scheduleResult) {
+                // Restore UI with results
+                appendBtn.disabled = false;
+                appendBtn.style.opacity = "1";
+                appendBtn.style.cursor = "pointer";
+                
+                clearBtn.disabled = false;
+                clearBtn.style.opacity = "1";
+                clearBtn.style.cursor = "pointer";
+                
+                // Calculate total scheduled sessions
+                let totalCount = 0;
+                Object.keys(scheduleResult.scheduled_courses).forEach(a => {
+                    totalCount += scheduleResult.scheduled_courses[a].length;
+                });
+                
+                const minCoverage = parseInt(document.getElementById("coverage-select").value);
+                const monthLabel = loadedMonthVal.textContent;
+                document.getElementById("current-config-summary").textContent = 
+                    `${monthLabel} 班表 | 已安排: ${totalCount}堂/次 | 安全在線門檻: ${minCoverage}位`;
+                
+                statsSection.classList.remove("hidden");
+                const activeTab = document.querySelector(".tab-btn.active").getAttribute("data-tab");
+                tabPanels.forEach(panel => panel.classList.add("hidden"));
+                document.getElementById(activeTab).classList.remove("hidden");
+                
+                renderStats(minCoverage);
+                renderCalendar(uploadedMonthCode);
+                renderHeatmap();
+                renderTable();
+            } else {
+                // Restore to completely empty state
+                appendBtn.disabled = true;
+                appendBtn.style.opacity = "0.5";
+                appendBtn.style.cursor = "not-allowed";
+                
+                clearBtn.disabled = true;
+                clearBtn.style.opacity = "0.5";
+                clearBtn.style.cursor = "not-allowed";
+                
+                statsSection.classList.add("hidden");
+                tabPanels.forEach(panel => panel.classList.add("hidden"));
+                emptyState.classList.remove("hidden");
+                
+                document.getElementById("current-config-summary").textContent = "請設定參數並開始安排。";
+            }
+            
+            // Clear details panel
+            selectedDate = null;
+            dayDetailEmpty.classList.remove("hidden");
+            dayDetailContent.classList.add("hidden");
+        }
+    }
+
+    // Clear all arrangements
+    function clearSchedule() {
+        if (confirm("確定要清除所有已安排的課程/會議嗎？")) {
+            // Push current state to undo history for safety
+            if (scheduleResult) {
+                scheduleHistory.push(JSON.stringify(scheduleResult));
+                undoBtn.disabled = false;
+                undoBtn.style.opacity = "1";
+                undoBtn.style.cursor = "pointer";
+            }
+            
+            scheduleResult = null;
+            
+            // Disable append and clear buttons
+            appendBtn.disabled = true;
+            appendBtn.style.opacity = "0.5";
+            appendBtn.style.cursor = "not-allowed";
+            
+            clearBtn.disabled = true;
+            clearBtn.style.opacity = "0.5";
+            clearBtn.style.cursor = "not-allowed";
+            
+            // Reset UI to empty state
+            statsSection.classList.add("hidden");
+            tabPanels.forEach(panel => panel.classList.add("hidden"));
+            emptyState.classList.remove("hidden");
+            
+            // Clear side details
+            selectedDate = null;
+            dayDetailEmpty.classList.remove("hidden");
+            dayDetailContent.classList.add("hidden");
+            
+            document.getElementById("current-config-summary").textContent = "請設定參數並開始安排。";
+        }
     }
 
     // Render Stats Section

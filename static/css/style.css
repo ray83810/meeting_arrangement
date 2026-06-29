@@ -1532,37 +1532,53 @@ select:focus {
 
 .submit-buttons-container {
     display: flex;
-    gap: 12px;
+    flex-direction: column;
     margin-top: 8px;
+    width: 100%;
 }
 
 .submit-buttons-container .primary-btn {
-    flex: 1.2;
+    width: 100%;
     margin-top: 0;
 }
 
-.secondary-btn {
-    flex: 0.8;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid var(--border-color);
-    color: var(--text-muted);
-    border-radius: 8px;
-    padding: 14px 18px;
-    font-size: 15px;
+.sub-buttons-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+    width: 100%;
+}
+
+.sub-buttons-row button {
+    flex: 1;
+    min-width: 0;
+    padding: 10px 4px;
+    font-size: 13px;
     font-weight: 600;
+    border-radius: 8px;
     cursor: not-allowed;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
+    gap: 6px;
     transition: all 0.2s;
     opacity: 0.5;
+    white-space: nowrap;
+}
+
+.sub-buttons-row button:not(:disabled) {
+    cursor: pointer;
+    opacity: 1;
+}
+
+.secondary-btn {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-color);
+    color: var(--text-muted);
 }
 
 .secondary-btn:not(:disabled) {
     color: #fff;
-    cursor: pointer;
-    opacity: 1;
     background: rgba(255, 255, 255, 0.1);
 }
 
@@ -1570,5 +1586,39 @@ select:focus {
     background: rgba(255, 255, 255, 0.15);
     border-color: rgba(255, 255, 255, 0.3);
     box-shadow: 0 4px 12px rgba(255, 255, 255, 0.05);
+}
+
+.undo-btn {
+    background: rgba(239, 68, 68, 0.05);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    color: rgba(239, 68, 68, 0.6);
+}
+
+.undo-btn:not(:disabled) {
+    color: #f87171;
+    background: rgba(239, 68, 68, 0.1);
+}
+
+.undo-btn:not(:disabled):hover {
+    background: rgba(239, 68, 68, 0.2);
+    border-color: rgba(239, 68, 68, 0.5);
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.1);
+}
+
+.clear-btn {
+    background: rgba(245, 158, 11, 0.05);
+    border: 1px solid rgba(245, 158, 11, 0.2);
+    color: rgba(245, 158, 11, 0.6);
+}
+
+.clear-btn:not(:disabled) {
+    color: #fbbf24;
+    background: rgba(245, 158, 11, 0.1);
+}
+
+.clear-btn:not(:disabled):hover {
+    background: rgba(245, 158, 11, 0.2);
+    border-color: rgba(245, 158, 11, 0.5);
+    box-shadow: 0 4px 12px rgba(245, 158, 11, 0.1);
 }
 
