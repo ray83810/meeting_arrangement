@@ -410,7 +410,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 
             } catch (err) {
                 console.error("Error reading file:", err);
-                showUploadStatus("解析 Excel 失敗：" + err.message, "error");
+                showUploadStatus("解析 Excel 失敗：" + err.message + "\n\nStack Trace:\n" + err.stack, "error");
             }
         };
         reader.readAsArrayBuffer(file);
@@ -418,6 +418,27 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function showUploadStatus(msg, type) {
         uploadStatus.className = "upload-status " + type;
+        if (type === "error") {
+            uploadStatus.style.whiteSpace = "pre-wrap";
+            uploadStatus.style.fontFamily = "monospace";
+            uploadStatus.style.textAlign = "left";
+            uploadStatus.style.fontSize = "10px";
+            uploadStatus.style.backgroundColor = "rgba(239, 68, 68, 0.1)";
+            uploadStatus.style.border = "1px solid rgba(239, 68, 68, 0.3)";
+            uploadStatus.style.padding = "8px 12px";
+            uploadStatus.style.borderRadius = "4px";
+            uploadStatus.style.marginTop = "10px";
+        } else {
+            uploadStatus.style.whiteSpace = "";
+            uploadStatus.style.fontFamily = "";
+            uploadStatus.style.textAlign = "";
+            uploadStatus.style.fontSize = "";
+            uploadStatus.style.backgroundColor = "";
+            uploadStatus.style.border = "";
+            uploadStatus.style.padding = "";
+            uploadStatus.style.borderRadius = "";
+            uploadStatus.style.marginTop = "";
+        }
         uploadStatus.textContent = msg;
     }
 
