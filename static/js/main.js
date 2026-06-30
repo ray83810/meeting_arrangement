@@ -327,6 +327,32 @@ document.addEventListener("DOMContentLoaded", () => {
                 clearBtn.style.opacity = "0.5";
                 clearBtn.style.cursor = "not-allowed";
                 
+                // Calculate initial online matrix immediately on upload
+                const initialOnlineMatrix = {};
+                validDates.forEach(dStr => {
+                    initialOnlineMatrix[dStr] = {};
+                    for (let h = 0; h < 24; h++) {
+                        initialOnlineMatrix[dStr][h] = [];
+                    }
+                });
+                
+                Object.keys(agentsData).forEach(agentName => {
+                    const agentInfo = agentsData[agentName];
+                    const schedule = agentInfo.schedule;
+                    
+                    validDates.forEach(dStr => {
+                        const cellVal = schedule[dStr];
+                        const startHour = getAgentShiftHours(cellVal);
+                        if (startHour !== null) {
+                            for (let i = 0; i < 9; i++) {
+                                const h = (startHour + i) % 24;
+                                initialOnlineMatrix[dStr][h].push(agentName);
+                            }
+                        }
+                    });
+                });
+                onlineMatrixOrigGlobal = initialOnlineMatrix;
+
                 initData = {
                     dates: validDates,
                     agents: agentsData,
@@ -1844,58 +1870,60 @@ document.addEventListener("DOMContentLoaded", () => {
                 if (R.length === 0) continue;
                 
                 // Evaluate coverage
-                let minBefore = 0;
-                if (scheduleResult && scheduleResult.available_agents && scheduleResult.available_agents[dStr]) {
-                    const beforeCoverages = candidateHours.map(h => scheduleResult.available_agents[dStr][h].length);
-                    minBefore = Math.min(...beforeCoverages);
-                }
+                const getAgentsAtHour = (d, h) => {
+                    if (scheduleResult && scheduleResult.available_agents && scheduleResult.available_agents[d]) {
+                        return scheduleResult.available_agents[d][h];
+                    }
+                    return (onlineMatrixOrigGlobal[d] && onlineMatrixOrigGlobal[d][h]) ? onlineMatrixOrigGlobal[d][h] : [];
+                };
+                
+                const beforeCoverages = candidateHours.map(h => getAgentsAtHour(dStr, h).length);
+                const minBefore = Math.min(...beforeCoverages);
                 
                 let bestMealHour = R[0];
                 let minAfter = 0;
+                let bestMealScore = -999;
+                let bestMinOtherOnline = 999;
                 
-                if (scheduleResult && scheduleResult.available_agents && scheduleResult.available_agents[dStr]) {
-                    let bestMealScore = -999;
-                    let bestMinOtherOnline = 999;
+                R.forEach(m => {
+                    let minOtherOnline = 999;
                     
-                    R.forEach(m => {
-                        let minOtherOnline = 999;
-                        
-                        candidateHours.forEach(h => {
-                            const hasAgent = scheduleResult.available_agents[dStr][h].includes(agentName);
-                            const otherOnline = scheduleResult.available_agents[dStr][h].length - (hasAgent ? 1 : 0);
-                            minOtherOnline = Math.min(minOtherOnline, otherOnline);
-                        });
-                        
-                        let minDailyCoverage = 999;
-                        for (let h = 0; h < 24; h++) {
-                            const currentAgents = scheduleResult.available_agents[dStr][h];
-                            let activeCount = currentAgents.length;
-                            
-                            let nameWasOnline = currentAgents.includes(agentName);
-                            let nameIsOnline = false;
-                            if (shiftHours.includes(h) && h !== m && !candidateHours.includes(h)) {
-                                nameIsOnline = true;
-                            }
-                            
-                            if (nameWasOnline && !nameIsOnline) {
-                                activeCount--;
-                            } else if (!nameWasOnline && nameIsOnline) {
-                                activeCount++;
-                            }
-                            
-                            minDailyCoverage = Math.min(minDailyCoverage, activeCount);
-                        }
-                        
-                        const score = minDailyCoverage;
-                        if (score > bestMealScore) {
-                            bestMealScore = score;
-                            bestMealHour = m;
-                            bestMinOtherOnline = minOtherOnline;
-                        }
+                    candidateHours.forEach(h => {
+                        const currentAgents = getAgentsAtHour(dStr, h);
+                        const hasAgent = currentAgents.includes(agentName);
+                        const otherOnline = currentAgents.length - (hasAgent ? 1 : 0);
+                        minOtherOnline = Math.min(minOtherOnline, otherOnline);
                     });
                     
-                    minAfter = bestMinOtherOnline;
-                }
+                    let minDailyCoverage = 999;
+                    for (let h = 0; h < 24; h++) {
+                        const currentAgents = getAgentsAtHour(dStr, h);
+                        let activeCount = currentAgents.length;
+                        
+                        let nameWasOnline = currentAgents.includes(agentName);
+                        let nameIsOnline = false;
+                        if (shiftHours.includes(h) && h !== m && !candidateHours.includes(h)) {
+                            nameIsOnline = true;
+                        }
+                        
+                        if (nameWasOnline && !nameIsOnline) {
+                            activeCount--;
+                        } else if (!nameWasOnline && nameIsOnline) {
+                            activeCount++;
+                        }
+                        
+                        minDailyCoverage = Math.min(minDailyCoverage, activeCount);
+                    }
+                    
+                    const score = minDailyCoverage;
+                    if (score > bestMealScore) {
+                        bestMealScore = score;
+                        bestMealHour = m;
+                        bestMinOtherOnline = minOtherOnline;
+                    }
+                });
+                
+                minAfter = bestMinOtherOnline;
                 
                 availableSlots.push({
                     date: dStr,
@@ -1905,7 +1933,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     minBefore: minBefore,
                     minAfter: minAfter,
                     mealHour: bestMealHour,
-                    violated: scheduleResult ? (minAfter < minCoverage) : false
+                    violated: minAfter < minCoverage
                 });
             }
         });
