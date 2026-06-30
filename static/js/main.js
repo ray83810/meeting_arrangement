@@ -1082,6 +1082,13 @@ document.addEventListener("DOMContentLoaded", () => {
                 tr.addEventListener("click", () => {
                     showAlternativeSlots(c.agent, c.course_number, c);
                 });
+                const editBtn = tr.querySelector(".edit-course-btn");
+                if (editBtn) {
+                    editBtn.addEventListener("click", (e) => {
+                        e.stopPropagation();
+                        showAlternativeSlots(c.agent, c.course_number, c);
+                    });
+                }
                 scheduleTableBody.appendChild(tr);
             });
         }
@@ -1634,13 +1641,22 @@ document.addEventListener("DOMContentLoaded", () => {
             coverageTimeline[dStr] = dayCoverage;
         });
         
+        // Convert availableAgents sets back to arrays for JSON compatibility and external use
+        const availableAgentsArrays = {};
+        dates.forEach(d => {
+            availableAgentsArrays[d] = {};
+            for (let h = 0; h < 24; h++) {
+                availableAgentsArrays[d][h] = Array.from(availableAgents[d][h]);
+            }
+        });
+        
         return {
             scheduled_courses: scheduledCourses,
             failed_schedules: failedSchedules,
             coverage_timeline: coverageTimeline,
             dates: dates,
             agents: SHIFTS_ALL,
-            available_agents: availableAgents,
+            available_agents: availableAgentsArrays,
             daily_meal_hours: dailyMealHours
         };
     }
