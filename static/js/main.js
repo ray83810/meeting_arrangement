@@ -341,6 +341,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 loadedMonthVal.textContent = `${yearStr}年${monthStr}月`;
                 loadedMonthGroup.style.display = "block";
                 
+                renderArchiveTable();
+                
                 submitBtn.disabled = false;
                 submitBtn.style.opacity = "1";
                 submitBtn.style.cursor = "pointer";
@@ -564,6 +566,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 renderCalendar(selectedMonth);
                 renderHeatmap();
                 renderTable();
+                
+                renderArchiveTable();
             } catch (err) {
                 console.error("Scheduling error:", err);
                 // Rollback history state since it errored
@@ -646,6 +650,8 @@ document.addEventListener("DOMContentLoaded", () => {
             selectedDate = null;
             dayDetailEmpty.classList.remove("hidden");
             dayDetailContent.classList.add("hidden");
+            
+            renderArchiveTable();
         }
     }
 
@@ -682,6 +688,8 @@ document.addEventListener("DOMContentLoaded", () => {
             dayDetailContent.classList.add("hidden");
             
             document.getElementById("current-config-summary").textContent = "請設定參數並開始安排。";
+            
+            renderArchiveTable();
         }
     }
 
@@ -1775,7 +1783,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // Alternative Slots Helper
-    function showAlternativeSlots(agentName, courseIndex, currentCourse) {
+    function showAlternativeSlots(agentName, courseIndex, currentCourse, archiveRowIndex = null) {
         modalAgentName.textContent = agentName;
         modalCourseName.textContent = `第 ${courseIndex} 堂課 (${currentCourse.duration}小時)`;
         modalCurrentTime.textContent = `${currentCourse.date} ${String(currentCourse.start_hour).padStart(2, "0")}:00 - ${String(currentCourse.end_hour).padStart(2, "0")}:00`;
@@ -1795,7 +1803,9 @@ document.addEventListener("DOMContentLoaded", () => {
         
         dates.forEach(dStr => {
             // Must not have another course on this day (excluding current course day)
-            const dayHasOtherCourse = scheduleResult.scheduled_courses[agentName].some(c => c.date === dStr && c.date !== currentCourse.date);
+            const dayHasOtherCourse = scheduleResult
+                ? scheduleResult.scheduled_courses[agentName].some(c => c.date === dStr && c.date !== currentCourse.date)
+                : false;
             if (dayHasOtherCourse) return;
             
             // Must not be a duty agent on this day
@@ -1834,51 +1844,58 @@ document.addEventListener("DOMContentLoaded", () => {
                 if (R.length === 0) continue;
                 
                 // Evaluate coverage
-                const beforeCoverages = candidateHours.map(h => scheduleResult.available_agents[dStr][h].length);
-                const minBefore = Math.min(...beforeCoverages);
+                let minBefore = 0;
+                if (scheduleResult && scheduleResult.available_agents && scheduleResult.available_agents[dStr]) {
+                    const beforeCoverages = candidateHours.map(h => scheduleResult.available_agents[dStr][h].length);
+                    minBefore = Math.min(...beforeCoverages);
+                }
                 
                 let bestMealHour = R[0];
-                let bestMealScore = -999;
-                let bestMinOtherOnline = 999;
+                let minAfter = 0;
                 
-                R.forEach(m => {
-                    let minOtherOnline = 999;
+                if (scheduleResult && scheduleResult.available_agents && scheduleResult.available_agents[dStr]) {
+                    let bestMealScore = -999;
+                    let bestMinOtherOnline = 999;
                     
-                    candidateHours.forEach(h => {
-                        const hasAgent = scheduleResult.available_agents[dStr][h].includes(agentName);
-                        const otherOnline = scheduleResult.available_agents[dStr][h].length - (hasAgent ? 1 : 0);
-                        minOtherOnline = Math.min(minOtherOnline, otherOnline);
+                    R.forEach(m => {
+                        let minOtherOnline = 999;
+                        
+                        candidateHours.forEach(h => {
+                            const hasAgent = scheduleResult.available_agents[dStr][h].includes(agentName);
+                            const otherOnline = scheduleResult.available_agents[dStr][h].length - (hasAgent ? 1 : 0);
+                            minOtherOnline = Math.min(minOtherOnline, otherOnline);
+                        });
+                        
+                        let minDailyCoverage = 999;
+                        for (let h = 0; h < 24; h++) {
+                            const currentAgents = scheduleResult.available_agents[dStr][h];
+                            let activeCount = currentAgents.length;
+                            
+                            let nameWasOnline = currentAgents.includes(agentName);
+                            let nameIsOnline = false;
+                            if (shiftHours.includes(h) && h !== m && !candidateHours.includes(h)) {
+                                nameIsOnline = true;
+                            }
+                            
+                            if (nameWasOnline && !nameIsOnline) {
+                                activeCount--;
+                            } else if (!nameWasOnline && nameIsOnline) {
+                                activeCount++;
+                            }
+                            
+                            minDailyCoverage = Math.min(minDailyCoverage, activeCount);
+                        }
+                        
+                        const score = minDailyCoverage;
+                        if (score > bestMealScore) {
+                            bestMealScore = score;
+                            bestMealHour = m;
+                            bestMinOtherOnline = minOtherOnline;
+                        }
                     });
                     
-                    let minDailyCoverage = 999;
-                    for (let h = 0; h < 24; h++) {
-                        const currentAgents = scheduleResult.available_agents[dStr][h];
-                        let activeCount = currentAgents.length;
-                        
-                        let nameWasOnline = currentAgents.includes(agentName);
-                        let nameIsOnline = false;
-                        if (shiftHours.includes(h) && h !== m && !candidateHours.includes(h)) {
-                            nameIsOnline = true;
-                        }
-                        
-                        if (nameWasOnline && !nameIsOnline) {
-                            activeCount--;
-                        } else if (!nameWasOnline && nameIsOnline) {
-                            activeCount++;
-                        }
-                        
-                        minDailyCoverage = Math.min(minDailyCoverage, activeCount);
-                    }
-                    
-                    const score = minDailyCoverage;
-                    if (score > bestMealScore) {
-                        bestMealScore = score;
-                        bestMealHour = m;
-                        bestMinOtherOnline = minOtherOnline;
-                    }
-                });
-                
-                const minAfter = bestMinOtherOnline;
+                    minAfter = bestMinOtherOnline;
+                }
                 
                 availableSlots.push({
                     date: dStr,
@@ -1888,7 +1905,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     minBefore: minBefore,
                     minAfter: minAfter,
                     mealHour: bestMealHour,
-                    violated: minAfter < minCoverage
+                    violated: scheduleResult ? (minAfter < minCoverage) : false
                 });
             }
         });
@@ -1915,6 +1932,10 @@ document.addEventListener("DOMContentLoaded", () => {
                 const wDays = ["日", "一", "二", "三", "四", "五", "六"];
                 const dayOfWeek = wDays[dateParts.getDay()];
                 
+                const beforeText = scheduleResult ? `${slot.minBefore} 位` : "未安排";
+                const afterText = scheduleResult ? `${slot.minAfter} 位` : "未安排";
+                const afterClass = scheduleResult ? (slot.violated ? 'warn' : 'ok') : '';
+
                 row.innerHTML = `
                     <div class="slot-time-col">
                         <span class="slot-date">${slot.date} (${dayOfWeek})</span>
@@ -1923,11 +1944,11 @@ document.addEventListener("DOMContentLoaded", () => {
                     <div class="slot-coverage-col">
                         <div class="cov-metric before">
                             <span>排課前在線</span>
-                            <strong>${slot.minBefore} 位</strong>
+                            <strong>${beforeText}</strong>
                         </div>
                         <div class="cov-metric after">
                             <span>排課後在線</span>
-                            <strong class="${slot.violated ? 'warn' : 'ok'}">${slot.minAfter} 位</strong>
+                            <strong class="${afterClass}">${afterText}</strong>
                         </div>
                     </div>
                     <div class="slot-action-col">
@@ -1937,7 +1958,17 @@ document.addEventListener("DOMContentLoaded", () => {
                 
                 const moveBtn = row.querySelector(".move-slot-btn");
                 moveBtn.addEventListener("click", () => {
-                    moveCourseToSlot(agentName, currentCourse, slot);
+                    if (archiveRowIndex !== null && archiveRowIndex !== undefined) {
+                        savedSchedules[archiveRowIndex].date = slot.date;
+                        savedSchedules[archiveRowIndex].time = `${String(slot.startHour).padStart(2, "0")}:00 - ${String((slot.startHour + currentCourse.duration) % 24).padStart(2, "0")}:00`;
+                        savedSchedules[archiveRowIndex].duration = currentCourse.duration;
+                        localStorage.setItem("saved_schedules", JSON.stringify(savedSchedules));
+                        renderArchiveTable();
+                        altModal.classList.add("hidden");
+                        showUploadStatus(`已成功更新存檔排程：將 ${agentName} 的時段變更為 ${slot.date} ${savedSchedules[archiveRowIndex].time}。`, "success");
+                    } else {
+                        moveCourseToSlot(agentName, currentCourse, slot);
+                    }
                 });
                 
                 altSlotsList.appendChild(row);
@@ -2053,6 +2084,8 @@ document.addEventListener("DOMContentLoaded", () => {
         renderHeatmap();
         renderTable();
         
+        renderArchiveTable();
+        
         // Show success toast
         showUploadStatus(`已成功將 ${agentName} 的課程移動至 ${d_new} (${String(newSlot.startHour).padStart(2, "0")}:00 - ${String(newSlot.endHour).padStart(2, "0")}:00)！`, "success");
         
@@ -2064,22 +2097,142 @@ document.addEventListener("DOMContentLoaded", () => {
     function renderArchiveTable() {
         archiveTableBody.innerHTML = "";
         if (savedSchedules.length === 0) {
-            archiveTableBody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">無排程存檔紀錄</td></tr>`;
+            archiveTableBody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">無排程存檔紀錄</td></tr>`;
             return;
         }
         
         savedSchedules.forEach((item, index) => {
+            // Validate the row against initData and scheduleResult
+            let statusHTML = "";
+            let violated = false;
+            
+            if (!initData.dates || initData.dates.length === 0) {
+                statusHTML = `<span class="status-indicator-inline" style="background: rgba(255,255,255,0.05); color: var(--text-muted); padding: 4px 8px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.1); font-size: 0.8rem;"><i class="fa-solid fa-file-excel" style="margin-right: 4px;"></i>請先上傳班表</span>`;
+            } else {
+                const agentInfo = initData.agents[item.name];
+                if (!agentInfo) {
+                    statusHTML = `<span class="status-indicator-inline danger" style="background: rgba(239,68,68,0.15); color: #f87171; padding: 4px 8px; border-radius: 4px; border: 1px solid rgba(239,68,68,0.3); font-size: 0.8rem;"><i class="fa-solid fa-circle-exclamation" style="margin-right: 4px;"></i>找不到同仁資料</span>`;
+                    violated = true;
+                } else {
+                    const date = item.date;
+                    const cellVal = agentInfo.schedule[date];
+                    const startHour = getAgentShiftHours(cellVal);
+                    
+                    if (startHour === null) {
+                        statusHTML = `<span class="status-indicator-inline danger" style="background: rgba(239,68,68,0.15); color: #f87171; padding: 4px 8px; border-radius: 4px; border: 1px solid rgba(239,68,68,0.3); font-size: 0.8rem;" title="當天是 OFF / 請假 / 未上班"><i class="fa-solid fa-calendar-xmark" style="margin-right: 4px;"></i>當天非上班日</span>`;
+                        violated = true;
+                    } else {
+                        // Parse time range
+                        const parsedTime = item.time.split(" - ");
+                        const hStart = parseInt(parsedTime[0].split(":")[0], 10);
+                        const duration = item.duration;
+                        
+                        const shiftHours = [];
+                        for (let i = 0; i < 9; i++) {
+                            shiftHours.push((startHour + i) % 24);
+                        }
+                        
+                        // Check if course hours are fully inside shiftHours
+                        let inShift = true;
+                        const courseHours = [];
+                        for (let i = 0; i < duration; i++) {
+                            const h = (hStart + i) % 24;
+                            courseHours.push(h);
+                            if (!shiftHours.includes(h)) {
+                                inShift = false;
+                            }
+                        }
+                        
+                        if (!inShift) {
+                            statusHTML = `<span class="status-indicator-inline danger" style="background: rgba(239,68,68,0.15); color: #f87171; padding: 4px 8px; border-radius: 4px; border: 1px solid rgba(239,68,68,0.3); font-size: 0.8rem;" title="排課時段超出該班別上班時間"><i class="fa-solid fa-clock" style="margin-right: 4px;"></i>超出上班時段</span>`;
+                            violated = true;
+                        } else {
+                            // Check meal hours
+                            let mealOverlap = false;
+                            let mealHours = [];
+                            if (scheduleResult && scheduleResult.daily_meal_hours && scheduleResult.daily_meal_hours[date] && scheduleResult.daily_meal_hours[date][item.name] !== undefined) {
+                                mealHours = [scheduleResult.daily_meal_hours[date][item.name]];
+                            } else {
+                                mealHours = parseMealHours(agentInfo.meal, startHour);
+                            }
+                            
+                            courseHours.forEach(h => {
+                                if (mealHours.includes(h)) {
+                                    mealOverlap = true;
+                                }
+                            });
+                            
+                            if (mealOverlap) {
+                                statusHTML = `<span class="status-indicator-inline danger" style="background: rgba(239,68,68,0.15); color: #f87171; padding: 4px 8px; border-radius: 4px; border: 1px solid rgba(239,68,68,0.3); font-size: 0.8rem;" title="排課時段與同仁用餐時間重疊"><i class="fa-solid fa-utensils" style="margin-right: 4px;"></i>與用餐時段重疊</span>`;
+                                violated = true;
+                            } else {
+                                // Check duty agent
+                                const isDuty = initData.dutyAgents && initData.dutyAgents[date] && initData.dutyAgents[date].includes(item.name);
+                                if (isDuty) {
+                                    statusHTML = `<span class="status-indicator-inline danger" style="background: rgba(239,68,68,0.15); color: #f87171; padding: 4px 8px; border-radius: 4px; border: 1px solid rgba(239,68,68,0.3); font-size: 0.8rem;" title="同仁當日擔任值日生，不應安排課程/會議"><i class="fa-solid fa-user-shield" style="margin-right: 4px;"></i>當日擔任值日生</span>`;
+                                    violated = true;
+                                } else {
+                                    // Check coverage threshold
+                                    let coverageLow = false;
+                                    let minCovVal = null;
+                                    if (scheduleResult && scheduleResult.coverage_timeline && scheduleResult.coverage_timeline[date]) {
+                                        const timeline = scheduleResult.coverage_timeline[date];
+                                        const minCoverageThreshold = parseInt(document.getElementById("coverage-select").value, 10) || 0;
+                                        
+                                        const hourCoverages = courseHours.map(h => {
+                                            const entry = timeline.find(t => t.hour === h);
+                                            return entry ? entry.after : 0;
+                                        });
+                                        minCovVal = Math.min(...hourCoverages);
+                                        if (minCovVal < minCoverageThreshold) {
+                                            coverageLow = true;
+                                        }
+                                    }
+                                    
+                                    if (coverageLow) {
+                                        statusHTML = `<span class="status-indicator-inline danger" style="background: rgba(239,68,68,0.15); color: #f87171; padding: 4px 8px; border-radius: 4px; border: 1px solid rgba(239,68,68,0.3); font-size: 0.8rem;" title="時段內的在線人力 (${minCovVal}位) 低於安全門檻"><i class="fa-solid fa-users-slash" style="margin-right: 4px;"></i>在線人力不足 (${minCovVal}位)</span>`;
+                                        violated = true;
+                                    } else {
+                                        statusHTML = `<span class="status-indicator-inline success" style="background: rgba(16,185,129,0.15); color: #34d399; padding: 4px 8px; border-radius: 4px; border: 1px solid rgba(16,185,129,0.3); font-size: 0.8rem;"><i class="fa-solid fa-circle-check" style="margin-right: 4px;"></i>符合安全規範</span>`;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             const tr = document.createElement("tr");
             tr.innerHTML = `
                 <td class="strong">${item.name}</td>
                 <td>${item.date}</td>
                 <td>${item.time}</td>
                 <td>${item.duration} 小時</td>
+                <td>${statusHTML}</td>
                 <td>
-                    <button class="delete-archive-btn" data-index="${index}" style="padding: 4px 8px; font-size: 0.8rem; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); color: #f87171; border-radius: 4px; font-weight: 500; cursor: pointer;"><i class="fa-solid fa-trash-can"></i> 刪除</button>
+                    <button class="edit-archive-btn" style="padding: 4px 8px; font-size: 0.8rem; background: rgba(13, 148, 136, 0.1); border: 1px solid rgba(13, 148, 136, 0.3); color: var(--primary); border-radius: 4px; font-weight: 500; cursor: pointer; margin-right: 6px;"><i class="fa-solid fa-pen-to-square"></i> 調整</button>
+                    <button class="delete-archive-btn" style="padding: 4px 8px; font-size: 0.8rem; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); color: #f87171; border-radius: 4px; font-weight: 500; cursor: pointer;"><i class="fa-solid fa-trash-can"></i> 刪除</button>
                 </td>
             `;
             
+            const editBtn = tr.querySelector(".edit-archive-btn");
+            editBtn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                // Parse time range
+                const parsedTime = item.time.split(" - ");
+                const startHour = parseInt(parsedTime[0].split(":")[0], 10);
+                const endHour = parseInt(parsedTime[1].split(":")[0], 10);
+                const tempCourse = {
+                    agent: item.name,
+                    date: item.date,
+                    start_hour: startHour,
+                    end_hour: endHour,
+                    duration: item.duration,
+                    course_number: index + 1
+                };
+                showAlternativeSlots(item.name, index + 1, tempCourse, index);
+            });
+
             const delBtn = tr.querySelector(".delete-archive-btn");
             delBtn.addEventListener("click", (e) => {
                 e.stopPropagation();
