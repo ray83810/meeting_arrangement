@@ -1,6 +1,6 @@
 document.addEventListener("DOMContentLoaded", () => {
     // State management
-    let initData = { months: [], agents: [] };
+    let initData = { months: [], agents: [], dutyAgents: {} };
     let scheduleResult = null;
     let scheduleHistory = [];
     let selectedDate = null;
@@ -41,6 +41,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const dayDetailContent = document.getElementById("day-detail-content");
     const selectedDateTitle = document.getElementById("selected-date-title");
     const selectedDateWeekday = document.getElementById("selected-date-weekday");
+    const dayDutyContainer = document.getElementById("day-duty-container");
+    const dayDutyAgents = document.getElementById("day-duty-agents");
     const dayCoursesList = document.getElementById("day-courses-list");
     const dayCoverageTimeline = document.getElementById("day-coverage-timeline");
 
@@ -268,6 +270,30 @@ document.addEventListener("DOMContentLoaded", () => {
                     }
                 }
                 
+                // Parse duty agents if they exist
+                const dutyAgents = {};
+                validDates.forEach(d_str => {
+                    dutyAgents[d_str] = [];
+                });
+                
+                for (let r = 2; r <= range.e.r; r++) {
+                    const cellE = sheet[XLSX.utils.encode_cell({ r: r, c: 4 })]; // Column E (0-based c:4)
+                    const valE = cellE ? cellE.v : null;
+                    if (valE && typeof valE === "string" && valE.includes("值日")) {
+                        validDates.forEach(d_str => {
+                            const colIdx = colMapping[d_str];
+                            const cell = sheet[XLSX.utils.encode_cell({ r: r, c: colIdx })];
+                            const rawVal = cell ? cell.v : null;
+                            if (rawVal) {
+                                const normVal = normalizeName(rawVal);
+                                if (normVal && SHIFTS_ALL.includes(normVal)) {
+                                    dutyAgents[d_str].push(normVal);
+                                }
+                            }
+                        });
+                    }
+                }
+
                 uploadedMonthCode = monthCode;
                 scheduleResult = null;
                 scheduleHistory = [];
@@ -283,7 +309,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 
                 initData = {
                     dates: validDates,
-                    agents: agentsData
+                    agents: agentsData,
+                    dutyAgents: dutyAgents
                 };
                 
                 const yearStr = monthCode.substring(0, 4);
@@ -809,6 +836,15 @@ document.addEventListener("DOMContentLoaded", () => {
         selectedDateTitle.textContent = dateStr;
         selectedDateWeekday.textContent = weekdayStr;
 
+        // Render Duty Agents if they exist
+        if (initData.dutyAgents && initData.dutyAgents[dateStr] && initData.dutyAgents[dateStr].length > 0) {
+            dayDutyContainer.classList.remove("hidden");
+            dayDutyAgents.textContent = initData.dutyAgents[dateStr].join("、");
+        } else {
+            dayDutyContainer.classList.add("hidden");
+            dayDutyAgents.textContent = "-";
+        }
+
         // Gather all courses for this day
         const dayCourses = [];
         Object.keys(scheduleResult.scheduled_courses).forEach(agent => {
@@ -1245,15 +1281,19 @@ document.addEventListener("DOMContentLoaded", () => {
                 for (let dIdx = 0; dIdx < dates.length; dIdx++) {
                     const dStr = dates[dIdx];
                     
-                    // Any selected agent already has a course scheduled on this day?
-                    let dayHasCourse = false;
+                    // Any selected agent already has a course scheduled or is a duty agent on this day?
+                    let dayHasCourseOrDuty = false;
                     for (let name of selectedAgents) {
                         if (scheduledCourses[name].some(c => c.date === dStr)) {
-                            dayHasCourse = true;
+                            dayHasCourseOrDuty = true;
+                            break;
+                        }
+                        if (initData.dutyAgents && initData.dutyAgents[dStr] && initData.dutyAgents[dStr].includes(name)) {
+                            dayHasCourseOrDuty = true;
                             break;
                         }
                     }
-                    if (dayHasCourse) continue;
+                    if (dayHasCourseOrDuty) continue;
                     
                     // Check working hours and contiguous slots for all selected agents
                     const workingHoursByAgent = {};
@@ -1495,6 +1535,9 @@ document.addEventListener("DOMContentLoaded", () => {
                     const dayHasCourse = scheduledCourses[name].some(c => c.date === dStr);
                     if (dayHasCourse) return;
                     
+                    const isDutyAgent = initData.dutyAgents && initData.dutyAgents[dStr] && initData.dutyAgents[dStr].includes(name);
+                    if (isDutyAgent) return;
+                    
                     const cellVal = schedule[dStr];
                     const startHour = getAgentShiftHours(cellVal);
                     if (startHour === null) return;
@@ -1728,6 +1771,10 @@ document.addEventListener("DOMContentLoaded", () => {
             // Must not have another course on this day (excluding current course day)
             const dayHasOtherCourse = scheduleResult.scheduled_courses[agentName].some(c => c.date === dStr && c.date !== currentCourse.date);
             if (dayHasOtherCourse) return;
+            
+            // Must not be a duty agent on this day
+            const isDutyAgent = initData.dutyAgents && initData.dutyAgents[dStr] && initData.dutyAgents[dStr].includes(agentName);
+            if (isDutyAgent) return;
             
             const cellVal = schedule[dStr];
             const startHour = getAgentShiftHours(cellVal);
