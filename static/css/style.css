@@ -528,6 +528,16 @@ select:focus {
     min-height: 0; /* Important for flex child overflow */
 }
 
+/* Tab Panel */
+.tab-panel {
+    height: 100%;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+}
+
 .tab-header-wrapper {
     border-bottom: 1px solid var(--border-color);
     margin-bottom: 20px;
