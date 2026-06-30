@@ -839,7 +839,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 item.innerHTML = `
                     <div class="course-item-header">
                         <span class="course-agent">${c.agent}</span>
-                        <span class="course-time">${String(c.start_hour).padStart(2, "0")}:00 - ${String(c.end_hour).padStart(2, "0")}:00</span>
+                        <span class="course-time">${String(c.start_hour).padStart(2, "0")}:00 - ${String(c.end_hour).padStart(2, "0")}:00 <i class="fa-solid fa-pen-to-square" style="color: var(--primary); margin-left: 6px; font-size: 0.85rem;" title="按此調整時段"></i></span>
                     </div>
                     <div class="course-item-body">
                         <span>時長: ${c.duration}小時</span>
@@ -1055,7 +1055,7 @@ document.addEventListener("DOMContentLoaded", () => {
         });
 
         if (courses.length === 0) {
-            scheduleTableBody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">無排課記錄</td></tr>`;
+            scheduleTableBody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted);">無排課記錄</td></tr>`;
         } else {
             courses.forEach(c => {
                 const tr = document.createElement("tr");
@@ -1074,6 +1074,9 @@ document.addEventListener("DOMContentLoaded", () => {
                             <i class="fa-solid ${c.violated ? 'fa-triangle-exclamation' : 'fa-circle-check'}"></i>
                             ${c.violated ? '人力吃緊警告' : '在線人力安全'}
                         </span>
+                    </td>
+                    <td>
+                        <button class="btn btn-secondary btn-sm edit-course-btn" style="padding: 4px 8px; font-size: 0.8rem; background: rgba(13, 148, 136, 0.1); border: 1px solid rgba(13, 148, 136, 0.3); color: var(--primary); border-radius: 4px; font-weight: 500; cursor: pointer;"><i class="fa-solid fa-pen-to-square"></i> 調整</button>
                     </td>
                 `;
                 tr.addEventListener("click", () => {
