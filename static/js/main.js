@@ -1476,9 +1476,6 @@ document.addEventListener("DOMContentLoaded", () => {
                 const cNumForAgent = scheduledCourses[name].length + 1;
                 const agentInfo = agentsData[name];
                 const schedule = agentInfo.schedule;
-                const cellVal = schedule[dStr];
-                const startHour = getAgentShiftHours(cellVal);
-                if (startHour === null) return;
                 
                 let bestSlot = null;
                 let bestScore = -999;
@@ -1487,6 +1484,10 @@ document.addEventListener("DOMContentLoaded", () => {
                 dates.forEach(dStr => {
                     const dayHasCourse = scheduledCourses[name].some(c => c.date === dStr);
                     if (dayHasCourse) return;
+                    
+                    const cellVal = schedule[dStr];
+                    const startHour = getAgentShiftHours(cellVal);
+                    if (startHour === null) return;
                     
                     const shiftHours = [];
                     for (let i = 0; i < 9; i++) {
