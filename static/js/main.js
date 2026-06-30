@@ -349,10 +349,18 @@ document.addEventListener("DOMContentLoaded", () => {
                         const cellVal = schedule[dStr];
                         const startHour = getAgentShiftHours(cellVal);
                         if (startHour !== null) {
+                            const shiftHours = [];
                             for (let i = 0; i < 9; i++) {
-                                const h = (startHour + i) % 24;
-                                initialOnlineMatrix[dStr][h].push(agentName);
+                                shiftHours.push((startHour + i) % 24);
                             }
+                            // Subtract the default meal hour
+                            const defaultMealHours = parseMealHours(agentInfo.meal, startHour);
+                            const defaultMealHour = defaultMealHours[0];
+                            const workingHours = shiftHours.filter(h => h !== defaultMealHour);
+                            
+                            workingHours.forEach(h => {
+                                initialOnlineMatrix[dStr][h].push(agentName);
+                            });
                         }
                     });
                 });
