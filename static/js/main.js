@@ -79,6 +79,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const clearArchiveBtn = document.getElementById("clear-archive-btn");
     const archiveUndoBtn = document.getElementById("archive-undo-btn");
     const saveArchiveChangesBtn = document.getElementById("save-archive-changes-btn");
+    const archiveWarningContainer = document.getElementById("archive-warning-container");
+    const archiveWarningList = document.getElementById("archive-warning-list");
 
     // Upload Elements
     const uploadZone = document.getElementById("upload-zone");
@@ -371,6 +373,16 @@ document.addEventListener("DOMContentLoaded", () => {
                 loadedMonthGroup.style.display = "block";
                 
                 renderArchiveTable();
+                
+                renderCalendar(monthCode);
+                renderHeatmap();
+                
+                emptyState.classList.add("hidden");
+                statsSection.classList.remove("hidden");
+                
+                const activeTab = document.querySelector(".tab-btn.active").getAttribute("data-tab");
+                tabPanels.forEach(panel => panel.classList.add("hidden"));
+                document.getElementById(activeTab).classList.remove("hidden");
                 
                 submitBtn.disabled = false;
                 submitBtn.style.opacity = "1";
@@ -779,6 +791,60 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
+    // Helper to get active courses map (active schedule or fallback to archive preset)
+    function getActiveScheduledCourses() {
+        if (scheduleResult && scheduleResult.scheduled_courses) {
+            return scheduleResult.scheduled_courses;
+        }
+        
+        const courses = {};
+        SHIFTS_ALL.forEach(a => {
+            courses[a] = [];
+        });
+        
+        savedSchedules.forEach((item, index) => {
+            const agentName = item.name;
+            if (!courses[agentName]) {
+                courses[agentName] = [];
+            }
+            
+            const parsedTime = item.time.split(" - ");
+            const startHour = parseInt(parsedTime[0].split(":")[0], 10);
+            const endHour = parseInt(parsedTime[1].split(":")[0], 10);
+            const duration = item.duration;
+            
+            const candidateHours = [];
+            for (let i = 0; i < duration; i++) {
+                candidateHours.push((startHour + i) % 24);
+            }
+            
+            let minBefore = 0;
+            let minAfter = 0;
+            let mealHour = undefined;
+            
+            if (onlineMatrixOrigGlobal && onlineMatrixOrigGlobal[item.date]) {
+                const beforeCoverages = candidateHours.map(h => onlineMatrixOrigGlobal[item.date][h] ? onlineMatrixOrigGlobal[item.date][h].length : 0);
+                minBefore = Math.min(...beforeCoverages);
+                minAfter = Math.max(0, minBefore - 1);
+            }
+            
+            courses[agentName].push({
+                date: item.date,
+                start_hour: startHour,
+                end_hour: endHour,
+                duration: duration,
+                hours: candidateHours,
+                coverage_at_hours: candidateHours.map(() => minAfter),
+                total_online_at_hours: candidateHours.map(() => minBefore),
+                violated: minAfter < (parseInt(document.getElementById("coverage-select").value, 10) || 0),
+                course_number: index + 1,
+                meal_hour: mealHour
+            });
+        });
+        
+        return courses;
+    }
+
     // Render Tab 1: Calendar View
     function renderCalendar(monthCode) {
         calendarGrid.innerHTML = "";
@@ -821,8 +887,9 @@ document.addEventListener("DOMContentLoaded", () => {
             let dayCoursesCount = 0;
             let dayHasWarning = false;
 
-            Object.keys(scheduleResult.scheduled_courses).forEach(agent => {
-                scheduleResult.scheduled_courses[agent].forEach(c => {
+            const activeCoursesMap = getActiveScheduledCourses();
+            Object.keys(activeCoursesMap).forEach(agent => {
+                activeCoursesMap[agent].forEach(c => {
                     if (c.date === dateStr) {
                         dayCoursesCount++;
                         if (c.violated) {
@@ -910,8 +977,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
         // Gather all courses for this day
         const dayCourses = [];
-        Object.keys(scheduleResult.scheduled_courses).forEach(agent => {
-            scheduleResult.scheduled_courses[agent].forEach(c => {
+        const activeCoursesMap = getActiveScheduledCourses();
+        Object.keys(activeCoursesMap).forEach(agent => {
+            activeCoursesMap[agent].forEach(c => {
                 if (c.date === dateStr) {
                     dayCourses.push({
                         agent: agent,
@@ -956,7 +1024,40 @@ document.addEventListener("DOMContentLoaded", () => {
 
         // Render Day Coverage Timeline Chart
         dayCoverageTimeline.innerHTML = "";
-        const hourlyData = scheduleResult.coverage_timeline[dateStr] || [];
+        let hourlyData = [];
+        if (scheduleResult && scheduleResult.coverage_timeline && scheduleResult.coverage_timeline[dateStr]) {
+            hourlyData = scheduleResult.coverage_timeline[dateStr];
+        } else {
+            // Build dynamically from onlineMatrixOrigGlobal and savedSchedules!
+            const dayCoverage = [];
+            const courses = getActiveScheduledCourses();
+            
+            // Collect all busy hours for each agent on this date
+            const busyHours = {};
+            SHIFTS_ALL.forEach(a => {
+                busyHours[a] = new Set();
+                const agentCourses = courses[a] || [];
+                agentCourses.forEach(c => {
+                    if (c.date === dateStr) {
+                        c.hours.forEach(h => busyHours[a].add(h));
+                    }
+                });
+            });
+            
+            for (let h = 0; h < 24; h++) {
+                const beforeAgents = (onlineMatrixOrigGlobal[dateStr] && onlineMatrixOrigGlobal[dateStr][h]) ? onlineMatrixOrigGlobal[dateStr][h] : [];
+                const afterAgents = beforeAgents.filter(a => !busyHours[a] || !busyHours[a].has(h));
+                
+                dayCoverage.push({
+                    hour: h,
+                    before: beforeAgents.length,
+                    after: afterAgents.length,
+                    agents_before: beforeAgents,
+                    agents_after: afterAgents
+                });
+            }
+            hourlyData = dayCoverage;
+        }
         
         hourlyData.forEach(h => {
             const barWrapper = document.createElement("div");
@@ -1032,8 +1133,44 @@ document.addEventListener("DOMContentLoaded", () => {
     function renderHeatmap() {
         heatmapCells.innerHTML = "";
         
-        const dates = scheduleResult.dates;
-        const timeline = scheduleResult.coverage_timeline;
+        const dates = scheduleResult ? scheduleResult.dates : initData.dates;
+        if (!dates || dates.length === 0) return;
+        
+        let timeline = {};
+        if (scheduleResult && scheduleResult.coverage_timeline) {
+            timeline = scheduleResult.coverage_timeline;
+        } else {
+            // Build dynamically from onlineMatrixOrigGlobal and savedSchedules!
+            const courses = getActiveScheduledCourses();
+            
+            dates.forEach(dStr => {
+                const dayCoverage = [];
+                const busyHours = {};
+                SHIFTS_ALL.forEach(a => {
+                    busyHours[a] = new Set();
+                    const agentCourses = courses[a] || [];
+                    agentCourses.forEach(c => {
+                        if (c.date === dStr) {
+                            c.hours.forEach(h => busyHours[a].add(h));
+                        }
+                    });
+                });
+                
+                for (let h = 0; h < 24; h++) {
+                    const beforeAgents = (onlineMatrixOrigGlobal[dStr] && onlineMatrixOrigGlobal[dStr][h]) ? onlineMatrixOrigGlobal[dStr][h] : [];
+                    const afterAgents = beforeAgents.filter(a => !busyHours[a] || !busyHours[a].has(h));
+                    
+                    dayCoverage.push({
+                        hour: h,
+                        before: beforeAgents.length,
+                        after: afterAgents.length,
+                        agents_before: beforeAgents,
+                        agents_after: afterAgents
+                    });
+                }
+                timeline[dStr] = dayCoverage;
+            });
+        }
 
         // Render Y-Axis dates
         const yAxis = document.querySelector(".heatmap-y-axis");
@@ -1066,8 +1203,9 @@ document.addEventListener("DOMContentLoaded", () => {
             
             // Gather day courses for class tooltip info
             const dayCourses = [];
-            Object.keys(scheduleResult.scheduled_courses).forEach(agent => {
-                scheduleResult.scheduled_courses[agent].forEach(c => {
+            const activeCoursesMap = getActiveScheduledCourses();
+            Object.keys(activeCoursesMap).forEach(agent => {
+                activeCoursesMap[agent].forEach(c => {
                     if (c.date === d_str) {
                         dayCourses.push({ agent: agent, ...c });
                     }
@@ -1133,8 +1271,9 @@ document.addEventListener("DOMContentLoaded", () => {
         scheduleTableBody.innerHTML = "";
         
         const courses = [];
-        Object.keys(scheduleResult.scheduled_courses).forEach(agent => {
-            scheduleResult.scheduled_courses[agent].forEach(c => {
+        const activeCoursesMap = getActiveScheduledCourses();
+        Object.keys(activeCoursesMap).forEach(agent => {
+            activeCoursesMap[agent].forEach(c => {
                 courses.push({
                     agent: agent,
                     ...c
@@ -1622,6 +1761,28 @@ document.addEventListener("DOMContentLoaded", () => {
                         }
                         if (!isContiguous) continue;
                         
+                        // Overlap check for individual classes:
+                        // No two different individual classes should be scheduled at the same time slot across different agents.
+                        let overlapsOtherAgentCourse = false;
+                        for (let otherAgent of Object.keys(scheduledCourses)) {
+                            if (otherAgent === name) continue;
+                            const otherCourses = scheduledCourses[otherAgent] || [];
+                            const overlaps = otherCourses.some(c => {
+                                if (c.date !== dStr) return false;
+                                // Check hour overlap
+                                const otherHours = [];
+                                for (let h = c.start_hour; h < c.start_hour + c.duration; h++) {
+                                    otherHours.push(h % 24);
+                                }
+                                return candidateHours.some(h => otherHours.includes(h));
+                            });
+                            if (overlaps) {
+                                overlapsOtherAgentCourse = true;
+                                break;
+                            }
+                        }
+                        if (overlapsOtherAgentCourse) continue;
+                        
                         const P = getPotentialMealHours(name, startHour, defaultMealHours);
                         const R = P.filter(h => !candidateHours.includes(h));
                         
@@ -1868,6 +2029,34 @@ document.addEventListener("DOMContentLoaded", () => {
                     }
                 }
                 if (!isContiguous) continue;
+                
+                // If individual schedule, must not overlap with another agent's course
+                const isJointClass = scheduleResult ? scheduleResult.joint_class : false;
+                if (!isJointClass) {
+                    let overlapsOther = false;
+                    const activeCoursesMap = getActiveScheduledCourses();
+                    for (let otherAgent of Object.keys(activeCoursesMap)) {
+                        if (otherAgent === agentName) continue;
+                        const otherCourses = activeCoursesMap[otherAgent] || [];
+                        const overlaps = otherCourses.some(c => {
+                            if (c.date !== dStr) return false;
+                            // Do not count the course we are currently adjusting if we are in the main schedule
+                            if (archiveRowIndex === null && c.date === currentCourse.date && c.start_hour === currentCourse.start_hour) {
+                                return false;
+                            }
+                            const otherHours = [];
+                            for (let h = c.start_hour; h < c.start_hour + c.duration; h++) {
+                                otherHours.push(h % 24);
+                            }
+                            return candidateHours.some(h => otherHours.includes(h));
+                        });
+                        if (overlaps) {
+                            overlapsOther = true;
+                            break;
+                        }
+                    }
+                    if (overlapsOther) continue;
+                }
                 
                 const R = P.filter(h => !candidateHours.includes(h));
                 if (R.length === 0) continue;
@@ -2276,6 +2465,60 @@ document.addEventListener("DOMContentLoaded", () => {
             
             archiveTableBody.appendChild(tr);
         });
+        
+        // Find overlapping individual schedule slots in archives
+        const overlaps = [];
+        for (let i = 0; i < savedSchedules.length; i++) {
+            const item1 = savedSchedules[i];
+            const parsedTime1 = item1.time.split(" - ");
+            const start1 = parseInt(parsedTime1[0].split(":")[0], 10);
+            const end1 = parseInt(parsedTime1[1].split(":")[0], 10);
+            
+            const hours1 = [];
+            for (let h = start1; h < end1; h++) {
+                hours1.push(h % 24);
+            }
+            
+            for (let j = i + 1; j < savedSchedules.length; j++) {
+                const item2 = savedSchedules[j];
+                if (item1.date !== item2.date) continue;
+                
+                const parsedTime2 = item2.time.split(" - ");
+                const start2 = parseInt(parsedTime2[0].split(":")[0], 10);
+                const end2 = parseInt(parsedTime2[1].split(":")[0], 10);
+                
+                const hours2 = [];
+                for (let h = start2; h < end2; h++) {
+                    hours2.push(h % 24);
+                }
+                
+                // If they overlap
+                const overlapsHours = hours1.some(h => hours2.includes(h));
+                if (overlapsHours) {
+                    overlaps.push({
+                        date: item1.date,
+                        agent1: item1.name,
+                        time1: item1.time,
+                        agent2: item2.name,
+                        time2: item2.time
+                    });
+                }
+            }
+        }
+        
+        // Render warning notifications at the bottom of the table
+        if (overlaps.length > 0) {
+            archiveWarningContainer.classList.remove("hidden");
+            archiveWarningList.innerHTML = "";
+            overlaps.forEach(o => {
+                const li = document.createElement("li");
+                li.innerHTML = `<strong>${o.date}</strong> 重疊：<b>${o.agent1}</b> (${o.time1}) 與 <b>${o.agent2}</b> (${o.time2}) 同時段上課。`;
+                archiveWarningList.appendChild(li);
+            });
+        } else {
+            archiveWarningContainer.classList.add("hidden");
+            archiveWarningList.innerHTML = "";
+        }
     }
 
     // Archive History and Unsaved status helpers
