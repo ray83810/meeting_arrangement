@@ -374,6 +374,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 
                 renderArchiveTable();
                 
+                const minCoverage = parseInt(document.getElementById("coverage-select").value, 10) || 0;
+                renderStats(minCoverage);
                 renderCalendar(monthCode);
                 renderHeatmap();
                 
@@ -436,7 +438,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 emptyState.classList.add("hidden");
                 renderArchiveTable();
             } else {
-                if (scheduleResult) {
+                if (initData && initData.dates && initData.dates.length > 0) {
                     document.getElementById(targetTab).classList.remove("hidden");
                 } else {
                     emptyState.classList.remove("hidden");
@@ -741,8 +743,9 @@ document.addEventListener("DOMContentLoaded", () => {
         let warningsCount = 0;
         let coverages = [];
 
-        Object.keys(scheduleResult.scheduled_courses).forEach(agent => {
-            const list = scheduleResult.scheduled_courses[agent];
+        const activeCoursesMap = getActiveScheduledCourses();
+        Object.keys(activeCoursesMap).forEach(agent => {
+            const list = activeCoursesMap[agent];
             totalCourses += list.length;
             list.forEach(c => {
                 totalHours += c.duration;
@@ -756,21 +759,56 @@ document.addEventListener("DOMContentLoaded", () => {
         // Find average minimum remaining coverage
         let sumMin = 0;
         let dayCount = 0;
-        Object.keys(scheduleResult.coverage_timeline).forEach(date => {
-            let dayMin = 99;
-            let activeHours = false;
-            scheduleResult.coverage_timeline[date].forEach(h => {
-                // Only count hours where anyone was online before training
-                if (h.before > 0) {
-                    dayMin = Math.min(dayMin, h.after);
-                    activeHours = true;
+        
+        const dates = scheduleResult ? scheduleResult.dates : initData.dates;
+        if (dates && dates.length > 0) {
+            let timeline = {};
+            if (scheduleResult && scheduleResult.coverage_timeline) {
+                timeline = scheduleResult.coverage_timeline;
+            } else {
+                // Build dynamically
+                dates.forEach(dStr => {
+                    const dayCoverage = [];
+                    const busyHours = {};
+                    SHIFTS_ALL.forEach(a => {
+                        busyHours[a] = new Set();
+                        const agentCourses = activeCoursesMap[a] || [];
+                        agentCourses.forEach(c => {
+                            if (c.date === dStr) {
+                                c.hours.forEach(h => busyHours[a].add(h));
+                            }
+                        });
+                    });
+                    
+                    for (let h = 0; h < 24; h++) {
+                        const beforeAgents = (onlineMatrixOrigGlobal[dStr] && onlineMatrixOrigGlobal[dStr][h]) ? onlineMatrixOrigGlobal[dStr][h] : [];
+                        const afterAgents = beforeAgents.filter(a => !busyHours[a] || !busyHours[a].has(h));
+                        
+                        dayCoverage.push({
+                            hour: h,
+                            before: beforeAgents.length,
+                            after: afterAgents.length
+                        });
+                    }
+                    timeline[dStr] = dayCoverage;
+                });
+            }
+            
+            Object.keys(timeline).forEach(date => {
+                let dayMin = 99;
+                let activeHours = false;
+                timeline[date].forEach(h => {
+                    if (h.before > 0) {
+                        dayMin = Math.min(dayMin, h.after);
+                        activeHours = true;
+                    }
+                });
+                if (activeHours) {
+                    sumMin += dayMin;
+                    dayCount++;
                 }
             });
-            if (activeHours) {
-                sumMin += dayMin;
-                dayCount++;
-            }
-        });
+        }
 
         const avgMinCoverage = dayCount > 0 ? (sumMin / dayCount).toFixed(1) : 0;
 
@@ -932,11 +970,12 @@ document.addEventListener("DOMContentLoaded", () => {
         
         // Auto-select first day containing a course
         let autoSelected = false;
+        const activeCoursesMap = getActiveScheduledCourses();
         for (let d = 1; d <= daysInMonth; d++) {
             const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
             let hasCourse = false;
-            Object.keys(scheduleResult.scheduled_courses).forEach(agent => {
-                if (scheduleResult.scheduled_courses[agent].some(c => c.date === dateStr)) {
+            Object.keys(activeCoursesMap).forEach(agent => {
+                if (activeCoursesMap[agent].some(c => c.date === dateStr)) {
                     hasCourse = true;
                 }
             });
