@@ -8,6 +8,21 @@ document.addEventListener("DOMContentLoaded", () => {
     let uploadedMonthCode = null;
     let onlineMatrixOrigGlobal = {};
 
+    // Archive / Saved Schedules variables
+    const defaultSavedSchedules = [
+        { name: "Molly Song", date: "2026-07-01", time: "13:00 - 15:00", duration: 2 },
+        { name: "Sherry Lin", date: "2026-07-07", time: "13:00 - 15:00", duration: 2 },
+        { name: "Alex Chen", date: "2026-07-07", time: "16:00 - 18:00", duration: 2 },
+        { name: "Jian Kai Ding", date: "2026-07-07", time: "16:00 - 17:00", duration: 1 },
+        { name: "Jian Kai Ding", date: "2026-07-13", time: "16:00 - 17:00", duration: 1 },
+        { name: "Evan Liu", date: "2026-07-14", time: "15:00 - 17:00", duration: 2 },
+        { name: "Amber Wang", date: "2026-07-14", time: "16:00 - 17:00", duration: 1 },
+        { name: "Rex Liao", date: "2026-07-20", time: "16:00 - 17:00", duration: 1 },
+        { name: "Howard Chen", date: "2026-07-21", time: "15:00 - 17:00", duration: 2 },
+        { name: "Jacky Lee", date: "2026-07-21", time: "16:00 - 17:00", duration: 1 }
+    ];
+    let savedSchedules = JSON.parse(localStorage.getItem("saved_schedules")) || defaultSavedSchedules;
+
     // DOM Elements
     const loadedMonthGroup = document.getElementById("loaded-month-group");
     const loadedMonthVal = document.getElementById("loaded-month-val");
@@ -56,6 +71,11 @@ document.addEventListener("DOMContentLoaded", () => {
     const failedCoursesSection = document.getElementById("failed-courses-section");
     const failedCoursesList = document.getElementById("failed-courses-list");
     const exportCsvBtn = document.getElementById("export-csv-btn");
+
+    // Archive / Saved Schedules DOM Elements
+    const archiveTableBody = document.getElementById("archive-table-body");
+    const saveCurrentBtn = document.getElementById("save-current-btn");
+    const clearArchiveBtn = document.getElementById("clear-archive-btn");
 
     // Upload Elements
     const uploadZone = document.getElementById("upload-zone");
@@ -368,10 +388,16 @@ document.addEventListener("DOMContentLoaded", () => {
                 panel.classList.add("hidden");
             });
 
-            if (scheduleResult) {
-                document.getElementById(targetTab).classList.remove("hidden");
+            if (targetTab === "archive-tab") {
+                document.getElementById("archive-tab").classList.remove("hidden");
+                emptyState.classList.add("hidden");
+                renderArchiveTable();
             } else {
-                emptyState.classList.remove("hidden");
+                if (scheduleResult) {
+                    document.getElementById(targetTab).classList.remove("hidden");
+                } else {
+                    emptyState.classList.remove("hidden");
+                }
             }
         });
     });
@@ -2033,4 +2059,84 @@ document.addEventListener("DOMContentLoaded", () => {
         // Close modal
         altModal.classList.add("hidden");
     }
+
+    // Archive / Saved Schedules Logic
+    function renderArchiveTable() {
+        archiveTableBody.innerHTML = "";
+        if (savedSchedules.length === 0) {
+            archiveTableBody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">無排程存檔紀錄</td></tr>`;
+            return;
+        }
+        
+        savedSchedules.forEach((item, index) => {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+                <td class="strong">${item.name}</td>
+                <td>${item.date}</td>
+                <td>${item.time}</td>
+                <td>${item.duration} 小時</td>
+                <td>
+                    <button class="delete-archive-btn" data-index="${index}" style="padding: 4px 8px; font-size: 0.8rem; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); color: #f87171; border-radius: 4px; font-weight: 500; cursor: pointer;"><i class="fa-solid fa-trash-can"></i> 刪除</button>
+                </td>
+            `;
+            
+            const delBtn = tr.querySelector(".delete-archive-btn");
+            delBtn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                savedSchedules.splice(index, 1);
+                localStorage.setItem("saved_schedules", JSON.stringify(savedSchedules));
+                renderArchiveTable();
+            });
+            
+            archiveTableBody.appendChild(tr);
+        });
+    }
+
+    saveCurrentBtn.addEventListener("click", () => {
+        if (!scheduleResult) {
+            alert("目前沒有排課結果可以儲存！");
+            return;
+        }
+        
+        const courses = [];
+        Object.keys(scheduleResult.scheduled_courses).forEach(agent => {
+            scheduleResult.scheduled_courses[agent].forEach(c => {
+                courses.push({
+                    name: agent,
+                    date: c.date,
+                    time: `${String(c.start_hour).padStart(2, "0")}:00 - ${String(c.end_hour).padStart(2, "0")}:00`,
+                    duration: c.duration
+                });
+            });
+        });
+        
+        if (courses.length === 0) {
+            alert("目前排課結果中無已排定課程！");
+            return;
+        }
+        
+        let addedCount = 0;
+        courses.forEach(c => {
+            const exists = savedSchedules.some(s => s.name === c.name && s.date === c.date && s.time === c.time);
+            if (!exists) {
+                savedSchedules.push(c);
+                addedCount++;
+            }
+        });
+        
+        localStorage.setItem("saved_schedules", JSON.stringify(savedSchedules));
+        renderArchiveTable();
+        alert(`已成功儲存當前排課結果！共新增了 ${addedCount} 筆排程存檔。`);
+    });
+
+    clearArchiveBtn.addEventListener("click", () => {
+        if (confirm("您確定要清空所有的排程存檔嗎？此動作無法復原。")) {
+            savedSchedules = [];
+            localStorage.setItem("saved_schedules", JSON.stringify(savedSchedules));
+            renderArchiveTable();
+        }
+    });
+
+    // Initial render
+    renderArchiveTable();
 });
