@@ -6,6 +6,7 @@ document.addEventListener("DOMContentLoaded", () => {
     let selectedDate = null;
     let activeHeatmapMode = "after"; // "before" or "after"
     let uploadedMonthCode = null;
+    let onlineMatrixOrigGlobal = {};
 
     // DOM Elements
     const loadedMonthGroup = document.getElementById("loaded-month-group");
@@ -59,6 +60,14 @@ document.addEventListener("DOMContentLoaded", () => {
     const fileInput = document.getElementById("file-input");
     const fileNameText = document.getElementById("file-name-text");
     const uploadStatus = document.getElementById("upload-status");
+
+    // Modal Elements
+    const altModal = document.getElementById("alternative-slots-modal");
+    const closeModalBtn = document.getElementById("close-modal-btn");
+    const modalAgentName = document.getElementById("modal-agent-name");
+    const modalCourseName = document.getElementById("modal-course-name");
+    const modalCurrentTime = document.getElementById("modal-current-time");
+    const altSlotsList = document.getElementById("alternative-slots-list");
 
     // Initialize application data in upload-only mode
     initUploadOnlyMode();
@@ -379,6 +388,17 @@ document.addEventListener("DOMContentLoaded", () => {
     // Export CSV
     exportCsvBtn.addEventListener("click", exportToCSV);
 
+    // Close Modal Event Listeners
+    closeModalBtn.addEventListener("click", () => {
+        altModal.classList.add("hidden");
+    });
+
+    altModal.addEventListener("click", (e) => {
+        if (e.target === altModal) {
+            altModal.classList.add("hidden");
+        }
+    });
+
 
     // Initialize upload-only mode view
     function initUploadOnlyMode() {
@@ -402,6 +422,8 @@ document.addEventListener("DOMContentLoaded", () => {
         clearBtn.disabled = true;
         clearBtn.style.opacity = "0.5";
         clearBtn.style.cursor = "not-allowed";
+
+        onlineMatrixOrigGlobal = {};
     }
 
     function toggleAllCheckboxes(checked) {
@@ -826,6 +848,9 @@ document.addEventListener("DOMContentLoaded", () => {
                         </span>
                     </div>
                 `;
+                item.addEventListener("click", () => {
+                    showAlternativeSlots(c.agent, c.course_number, c);
+                });
                 dayCoursesList.appendChild(item);
             });
         }
@@ -1051,6 +1076,9 @@ document.addEventListener("DOMContentLoaded", () => {
                         </span>
                     </td>
                 `;
+                tr.addEventListener("click", () => {
+                    showAlternativeSlots(c.agent, c.course_number, c);
+                });
                 scheduleTableBody.appendChild(tr);
             });
         }
@@ -1157,6 +1185,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
             });
         });
+
+        onlineMatrixOrigGlobal = onlineMatrixOrig;
         
         // 3. Build availableAgents and scheduledCourses
         const availableAgents = {};
@@ -1653,5 +1683,287 @@ document.addEventListener("DOMContentLoaded", () => {
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+    }
+
+    // Alternative Slots Helper
+    function showAlternativeSlots(agentName, courseIndex, currentCourse) {
+        modalAgentName.textContent = agentName;
+        modalCourseName.textContent = `第 ${courseIndex} 堂課 (${currentCourse.duration}小時)`;
+        modalCurrentTime.textContent = `${currentCourse.date} ${String(currentCourse.start_hour).padStart(2, "0")}:00 - ${String(currentCourse.end_hour).padStart(2, "0")}:00`;
+        
+        altSlotsList.innerHTML = "";
+        
+        const agentInfo = initData.agents[agentName];
+        if (!agentInfo) return;
+        
+        const schedule = agentInfo.schedule;
+        const mealVal = agentInfo.meal;
+        const duration = currentCourse.duration;
+        const dates = initData.dates;
+        const minCoverage = parseInt(document.getElementById("coverage-select").value, 10) || 0;
+        
+        const availableSlots = [];
+        
+        dates.forEach(dStr => {
+            // Must not have another course on this day (excluding current course day)
+            const dayHasOtherCourse = scheduleResult.scheduled_courses[agentName].some(c => c.date === dStr && c.date !== currentCourse.date);
+            if (dayHasOtherCourse) return;
+            
+            const cellVal = schedule[dStr];
+            const startHour = getAgentShiftHours(cellVal);
+            if (startHour === null) return;
+            
+            const shiftHours = [];
+            for (let i = 0; i < 9; i++) {
+                shiftHours.push((startHour + i) % 24);
+            }
+            const defaultMealHours = parseMealHours(mealVal, startHour);
+            const P = getPotentialMealHours(agentName, startHour, defaultMealHours);
+            
+            for (let idx = 0; idx <= shiftHours.length - duration; idx++) {
+                const candidateHours = shiftHours.slice(idx, idx + duration);
+                
+                // Skip if it is the current slot
+                if (dStr === currentCourse.date && candidateHours[0] === currentCourse.start_hour) {
+                    continue;
+                }
+                
+                let isContiguous = true;
+                for (let k = 0; k < candidateHours.length - 1; k++) {
+                    if ((candidateHours[k+1] - candidateHours[k] + 24) % 24 !== 1) {
+                        isContiguous = false;
+                        break;
+                    }
+                }
+                if (!isContiguous) continue;
+                
+                const R = P.filter(h => !candidateHours.includes(h));
+                if (R.length === 0) continue;
+                
+                // Evaluate coverage
+                const beforeCoverages = candidateHours.map(h => scheduleResult.available_agents[dStr][h].length);
+                const minBefore = Math.min(...beforeCoverages);
+                
+                let bestMealHour = R[0];
+                let bestMealScore = -999;
+                let bestMinOtherOnline = 999;
+                
+                R.forEach(m => {
+                    let minOtherOnline = 999;
+                    
+                    candidateHours.forEach(h => {
+                        const hasAgent = scheduleResult.available_agents[dStr][h].includes(agentName);
+                        const otherOnline = scheduleResult.available_agents[dStr][h].length - (hasAgent ? 1 : 0);
+                        minOtherOnline = Math.min(minOtherOnline, otherOnline);
+                    });
+                    
+                    let minDailyCoverage = 999;
+                    for (let h = 0; h < 24; h++) {
+                        const currentAgents = scheduleResult.available_agents[dStr][h];
+                        let activeCount = currentAgents.length;
+                        
+                        let nameWasOnline = currentAgents.includes(agentName);
+                        let nameIsOnline = false;
+                        if (shiftHours.includes(h) && h !== m && !candidateHours.includes(h)) {
+                            nameIsOnline = true;
+                        }
+                        
+                        if (nameWasOnline && !nameIsOnline) {
+                            activeCount--;
+                        } else if (!nameWasOnline && nameIsOnline) {
+                            activeCount++;
+                        }
+                        
+                        minDailyCoverage = Math.min(minDailyCoverage, activeCount);
+                    }
+                    
+                    const score = minDailyCoverage;
+                    if (score > bestMealScore) {
+                        bestMealScore = score;
+                        bestMealHour = m;
+                        bestMinOtherOnline = minOtherOnline;
+                    }
+                });
+                
+                const minAfter = bestMinOtherOnline;
+                
+                availableSlots.push({
+                    date: dStr,
+                    startHour: candidateHours[0],
+                    endHour: (candidateHours[0] + duration) % 24 === 0 ? 24 : (candidateHours[0] + duration) % 24,
+                    hours: candidateHours,
+                    minBefore: minBefore,
+                    minAfter: minAfter,
+                    mealHour: bestMealHour,
+                    violated: minAfter < minCoverage
+                });
+            }
+        });
+        
+        availableSlots.sort((a, b) => {
+            if (a.date !== b.date) return a.date.localeCompare(b.date);
+            return a.startHour - b.startHour;
+        });
+        
+        if (availableSlots.length === 0) {
+            altSlotsList.innerHTML = `
+                <div class="no-slots-help">
+                    <i class="fa-solid fa-calendar-xmark" style="font-size: 2.2rem; color: var(--text-muted); margin-bottom: 8px;"></i>
+                    <span>此同仁在其他工作天均無可行且不衝突的排課時段。</span>
+                </div>
+            `;
+        } else {
+            availableSlots.forEach(slot => {
+                const row = document.createElement("div");
+                row.className = "slot-row-item";
+                
+                const timeStr = `${String(slot.startHour).padStart(2, "0")}:00 - ${String(slot.endHour).padStart(2, "0")}:00`;
+                const dateParts = new Date(slot.date);
+                const wDays = ["日", "一", "二", "三", "四", "五", "六"];
+                const dayOfWeek = wDays[dateParts.getDay()];
+                
+                row.innerHTML = `
+                    <div class="slot-time-col">
+                        <span class="slot-date">${slot.date} (${dayOfWeek})</span>
+                        <span class="slot-hour"><i class="fa-solid fa-clock"></i> ${timeStr} | 用餐: ${slot.mealHour}:00</span>
+                    </div>
+                    <div class="slot-coverage-col">
+                        <div class="cov-metric before">
+                            <span>排課前在線</span>
+                            <strong>${slot.minBefore} 位</strong>
+                        </div>
+                        <div class="cov-metric after">
+                            <span>排課後在線</span>
+                            <strong class="${slot.violated ? 'warn' : 'ok'}">${slot.minAfter} 位</strong>
+                        </div>
+                    </div>
+                    <div class="slot-action-col">
+                        <button class="move-slot-btn">移至此時段</button>
+                    </div>
+                `;
+                
+                const moveBtn = row.querySelector(".move-slot-btn");
+                moveBtn.addEventListener("click", () => {
+                    moveCourseToSlot(agentName, currentCourse, slot);
+                });
+                
+                altSlotsList.appendChild(row);
+            });
+        }
+        
+        altModal.classList.remove("hidden");
+    }
+
+    // Move Course Slot Action
+    function moveCourseToSlot(agentName, oldCourse, newSlot) {
+        if (scheduleHistory.length >= 15) {
+            scheduleHistory.shift();
+        }
+        scheduleHistory.push(JSON.stringify(scheduleResult));
+        
+        undoBtn.disabled = false;
+        undoBtn.style.opacity = "1";
+        undoBtn.style.cursor = "pointer";
+        
+        const d_old = oldCourse.date;
+        const d_new = newSlot.date;
+        const duration = oldCourse.duration;
+        const agentInfo = initData.agents[agentName];
+        const minCoverage = parseInt(document.getElementById("coverage-select").value, 10) || 0;
+        
+        // 1. Remove course from d_old
+        const cList = scheduleResult.scheduled_courses[agentName];
+        const idx = cList.findIndex(c => c.date === d_old && c.start_hour === oldCourse.start_hour);
+        if (idx !== -1) {
+            cList.splice(idx, 1);
+        }
+        
+        // Restore agent to d_old original working hours
+        const oldStartHour = getAgentShiftHours(agentInfo.schedule[d_old]);
+        const oldDefaultMealHours = parseMealHours(agentInfo.meal, oldStartHour);
+        const oldDefaultMeal = oldDefaultMealHours[0];
+        
+        for (let h = 0; h < 24; h++) {
+            const isOnlineNow = onlineMatrixOrigGlobal[d_old] && onlineMatrixOrigGlobal[d_old][h].includes(agentName);
+            const activeSet = new Set(scheduleResult.available_agents[d_old][h]);
+            if (isOnlineNow) {
+                activeSet.add(agentName);
+            } else {
+                activeSet.delete(agentName);
+            }
+            scheduleResult.available_agents[d_old][h] = Array.from(activeSet);
+        }
+        scheduleResult.daily_meal_hours[d_old][agentName] = oldDefaultMeal;
+        
+        // 2. Add course to d_new
+        const newStartHour = getAgentShiftHours(agentInfo.schedule[d_new]);
+        const newShiftHours = [];
+        for (let i = 0; i < 9; i++) {
+            newShiftHours.push((newStartHour + i) % 24);
+        }
+        
+        const newCourse = {
+            date: d_new,
+            start_hour: newSlot.startHour,
+            end_hour: newSlot.endHour,
+            duration: duration,
+            coverage_at_hours: newSlot.hours.map(h => {
+                const activeSet = new Set(scheduleResult.available_agents[d_new][h]);
+                return activeSet.size - (activeSet.has(agentName) ? 1 : 0);
+            }),
+            total_online_at_hours: newSlot.hours.map(h => {
+                const activeSet = new Set(scheduleResult.available_agents[d_new][h]);
+                activeSet.delete(agentName);
+                return activeSet.size;
+            }),
+            violated: newSlot.violated,
+            course_number: oldCourse.course_number,
+            meal_hour: newSlot.mealHour
+        };
+        cList.push(newCourse);
+        cList.sort((a, b) => a.course_number - b.course_number);
+        
+        // Update available_agents for d_new
+        for (let h = 0; h < 24; h++) {
+            const isOnlineNow = newShiftHours.includes(h) && h !== newSlot.mealHour && !newSlot.hours.includes(h);
+            const activeSet = new Set(scheduleResult.available_agents[d_new][h]);
+            if (isOnlineNow) {
+                activeSet.add(agentName);
+            } else {
+                activeSet.delete(agentName);
+            }
+            scheduleResult.available_agents[d_new][h] = Array.from(activeSet);
+        }
+        scheduleResult.daily_meal_hours[d_new][agentName] = newSlot.mealHour;
+        
+        // 3. Recalculate coverageTimeline
+        const datesToRecalc = [d_old, d_new];
+        datesToRecalc.forEach(dStr => {
+            const dayCoverage = [];
+            for (let h = 0; h < 24; h++) {
+                const beforeCount = onlineMatrixOrigGlobal[dStr] ? onlineMatrixOrigGlobal[dStr][h].length : 0;
+                const afterCount = scheduleResult.available_agents[dStr][h].length;
+                dayCoverage.push({
+                    hour: h,
+                    before: beforeCount,
+                    after: afterCount,
+                    agents_before: onlineMatrixOrigGlobal[dStr] ? onlineMatrixOrigGlobal[dStr][h] : [],
+                    agents_after: scheduleResult.available_agents[dStr][h]
+                });
+            }
+            scheduleResult.coverage_timeline[dStr] = dayCoverage;
+        });
+        
+        // 4. Update UI
+        renderStats(minCoverage);
+        renderCalendar(uploadedMonthCode);
+        renderHeatmap();
+        renderTable();
+        
+        // Show success toast
+        showUploadStatus(`已成功將 ${agentName} 的課程移動至 ${d_new} (${String(newSlot.startHour).padStart(2, "0")}:00 - ${String(newSlot.endHour).padStart(2, "0")}:00)！`, "success");
+        
+        // Close modal
+        altModal.classList.add("hidden");
     }
 });

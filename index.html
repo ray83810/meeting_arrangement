@@ -369,6 +369,38 @@
             </div>
         </main>
     </div>
+
+    <!-- Alternative Slots Modal -->
+    <div id="alternative-slots-modal" class="modal-overlay hidden">
+        <div class="modal-container">
+            <div class="modal-header">
+                <h3><i class="fa-solid fa-clock-rotate-left"></i> 調整課程/會議時段</h3>
+                <button id="close-modal-btn" class="close-btn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="current-slot-info">
+                    <div class="info-item">
+                        <span class="info-label">客服人員:</span>
+                        <span id="modal-agent-name" class="info-val">-</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">課程名稱:</span>
+                        <span id="modal-course-name" class="info-val">-</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">目前時段:</span>
+                        <span id="modal-current-time" class="info-val">-</span>
+                    </div>
+                </div>
+                
+                <h4 class="slots-section-title"><i class="fa-solid fa-list-check"></i> 可行替換時段與在線人力</h4>
+                <div id="alternative-slots-list" class="slots-list">
+                    <!-- Populated dynamically -->
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Custom JS -->
     <script src="static/js/main.js"></script>
 </body>
