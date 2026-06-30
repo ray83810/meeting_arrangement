@@ -2192,7 +2192,8 @@ document.addEventListener("DOMContentLoaded", () => {
                     minBefore: minBefore,
                     minAfter: minAfter,
                     mealHour: bestMealHour,
-                    violated: minAfter < minCoverage
+                    violated: minAfter < minCoverage,
+                    isMealOverlap: candidateHours.includes(defaultMealHours[0])
                 });
             }
         });
@@ -2222,11 +2223,18 @@ document.addEventListener("DOMContentLoaded", () => {
                 const beforeText = `${slot.minBefore} 位`;
                 const afterText = `${slot.minAfter} 位`;
                 const afterClass = slot.violated ? 'warn' : 'ok';
+                
+                const mealOverlapBadge = slot.isMealOverlap 
+                    ? `<span class="meal-overlap-badge" style="display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; padding: 2px 6px; font-size: 0.75rem; background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 4px;" title="此排課時段與同仁預設用餐時間衝突，系統已自動將用餐時間調整至 ${slot.mealHour}:00"><i class="fa-solid fa-utensils"></i> 與預設用餐重疊 (用餐已自動調移至 ${slot.mealHour}:00)</span>`
+                    : '';
 
                 row.innerHTML = `
                     <div class="slot-time-col">
                         <span class="slot-date">${slot.date} (${dayOfWeek})</span>
-                        <span class="slot-hour"><i class="fa-solid fa-clock"></i> ${timeStr} | 用餐: ${slot.mealHour}:00</span>
+                        <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 4px; margin-top: 4px;">
+                            <span class="slot-hour"><i class="fa-solid fa-clock"></i> ${timeStr} | 用餐: ${slot.mealHour}:00</span>
+                            ${mealOverlapBadge}
+                        </div>
                     </div>
                     <div class="slot-coverage-col">
                         <div class="cov-metric before">
