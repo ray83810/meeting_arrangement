@@ -381,7 +381,13 @@
                             <div class="list-header">
                                 <h4>排程存檔紀錄</h4>
                                 <div class="list-actions" style="display: flex; gap: 10px;">
-                                    <button id="save-current-btn" class="primary-btn" style="background: var(--primary); border: none; padding: 10px 16px; border-radius: 6px; color: #fff; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                                    <button id="archive-undo-btn" class="secondary-btn" style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); padding: 10px 16px; border-radius: 6px; color: var(--text); font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; opacity: 0.5; cursor: not-allowed;" disabled>
+                                        <i class="fa-solid fa-rotate-left"></i> 回上一步
+                                    </button>
+                                    <button id="save-archive-changes-btn" class="primary-btn" style="background: var(--primary); border: none; padding: 10px 16px; border-radius: 6px; color: #fff; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; box-shadow: 0 4px 12px rgba(13, 148, 136, 0.3);">
+                                        <i class="fa-solid fa-floppy-disk"></i> 儲存變更
+                                    </button>
+                                    <button id="save-current-btn" class="secondary-btn" style="background: rgba(13, 148, 136, 0.1); border: 1px solid rgba(13, 148, 136, 0.3); padding: 10px 16px; border-radius: 6px; color: var(--primary); font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px;">
                                         <i class="fa-solid fa-cloud-arrow-up"></i> 儲存當前排課結果
                                     </button>
                                     <button id="clear-archive-btn" class="secondary-btn" style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); padding: 10px 16px; border-radius: 6px; color: #f87171; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px;">

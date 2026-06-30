@@ -22,6 +22,7 @@ document.addEventListener("DOMContentLoaded", () => {
         { name: "Jacky Lee", date: "2026-07-21", time: "16:00 - 17:00", duration: 1 }
     ];
     let savedSchedules = JSON.parse(localStorage.getItem("saved_schedules")) || defaultSavedSchedules;
+    let archiveHistory = [];
 
     // DOM Elements
     const loadedMonthGroup = document.getElementById("loaded-month-group");
@@ -76,6 +77,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const archiveTableBody = document.getElementById("archive-table-body");
     const saveCurrentBtn = document.getElementById("save-current-btn");
     const clearArchiveBtn = document.getElementById("clear-archive-btn");
+    const archiveUndoBtn = document.getElementById("archive-undo-btn");
+    const saveArchiveChangesBtn = document.getElementById("save-archive-changes-btn");
 
     // Upload Elements
     const uploadZone = document.getElementById("upload-zone");
@@ -1960,9 +1963,9 @@ document.addEventListener("DOMContentLoaded", () => {
                 const wDays = ["日", "一", "二", "三", "四", "五", "六"];
                 const dayOfWeek = wDays[dateParts.getDay()];
                 
-                const beforeText = scheduleResult ? `${slot.minBefore} 位` : "未安排";
-                const afterText = scheduleResult ? `${slot.minAfter} 位` : "未安排";
-                const afterClass = scheduleResult ? (slot.violated ? 'warn' : 'ok') : '';
+                const beforeText = `${slot.minBefore} 位`;
+                const afterText = `${slot.minAfter} 位`;
+                const afterClass = slot.violated ? 'warn' : 'ok';
 
                 row.innerHTML = `
                     <div class="slot-time-col">
@@ -1987,13 +1990,14 @@ document.addEventListener("DOMContentLoaded", () => {
                 const moveBtn = row.querySelector(".move-slot-btn");
                 moveBtn.addEventListener("click", () => {
                     if (archiveRowIndex !== null && archiveRowIndex !== undefined) {
+                        pushArchiveHistory();
                         savedSchedules[archiveRowIndex].date = slot.date;
                         savedSchedules[archiveRowIndex].time = `${String(slot.startHour).padStart(2, "0")}:00 - ${String((slot.startHour + currentCourse.duration) % 24).padStart(2, "0")}:00`;
                         savedSchedules[archiveRowIndex].duration = currentCourse.duration;
-                        localStorage.setItem("saved_schedules", JSON.stringify(savedSchedules));
                         renderArchiveTable();
+                        updateArchiveSaveBtnState();
                         altModal.classList.add("hidden");
-                        showUploadStatus(`已成功更新存檔排程：將 ${agentName} 的時段變更為 ${slot.date} ${savedSchedules[archiveRowIndex].time}。`, "success");
+                        showUploadStatus(`已更新暫存排程：將 ${agentName} 的時段變更為 ${slot.date} ${savedSchedules[archiveRowIndex].time}，請記得點擊「儲存變更」以永久儲存。`, "warning");
                     } else {
                         moveCourseToSlot(agentName, currentCourse, slot);
                     }
@@ -2264,14 +2268,68 @@ document.addEventListener("DOMContentLoaded", () => {
             const delBtn = tr.querySelector(".delete-archive-btn");
             delBtn.addEventListener("click", (e) => {
                 e.stopPropagation();
+                pushArchiveHistory();
                 savedSchedules.splice(index, 1);
-                localStorage.setItem("saved_schedules", JSON.stringify(savedSchedules));
                 renderArchiveTable();
+                updateArchiveSaveBtnState();
             });
             
             archiveTableBody.appendChild(tr);
         });
     }
+
+    // Archive History and Unsaved status helpers
+    function pushArchiveHistory() {
+        if (archiveHistory.length >= 20) {
+            archiveHistory.shift();
+        }
+        archiveHistory.push(JSON.stringify(savedSchedules));
+        updateArchiveUndoBtnState();
+    }
+
+    function updateArchiveUndoBtnState() {
+        if (archiveHistory.length > 0) {
+            archiveUndoBtn.disabled = false;
+            archiveUndoBtn.style.opacity = "1";
+            archiveUndoBtn.style.cursor = "pointer";
+        } else {
+            archiveUndoBtn.disabled = true;
+            archiveUndoBtn.style.opacity = "0.5";
+            archiveUndoBtn.style.cursor = "not-allowed";
+        }
+    }
+
+    function updateArchiveSaveBtnState() {
+        const currentSavedStr = localStorage.getItem("saved_schedules") || JSON.stringify(defaultSavedSchedules);
+        const inMemoryStr = JSON.stringify(savedSchedules);
+        
+        if (currentSavedStr !== inMemoryStr) {
+            saveArchiveChangesBtn.style.background = "#eab308";
+            saveArchiveChangesBtn.style.boxShadow = "0 4px 12px rgba(234, 179, 8, 0.4)";
+            saveArchiveChangesBtn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> 儲存變更 *';
+        } else {
+            saveArchiveChangesBtn.style.background = "var(--primary)";
+            saveArchiveChangesBtn.style.boxShadow = "0 4px 12px rgba(13, 148, 136, 0.3)";
+            saveArchiveChangesBtn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> 儲存變更';
+        }
+    }
+
+    saveArchiveChangesBtn.addEventListener("click", () => {
+        localStorage.setItem("saved_schedules", JSON.stringify(savedSchedules));
+        updateArchiveSaveBtnState();
+        showUploadStatus("已成功將所有存檔變更儲存至瀏覽器！", "success");
+    });
+
+    archiveUndoBtn.addEventListener("click", () => {
+        if (archiveHistory.length > 0) {
+            const prevStateStr = archiveHistory.pop();
+            savedSchedules = JSON.parse(prevStateStr);
+            renderArchiveTable();
+            updateArchiveUndoBtnState();
+            updateArchiveSaveBtnState();
+            showUploadStatus("已還原上一次的存檔操作。", "success");
+        }
+    });
 
     saveCurrentBtn.addEventListener("click", () => {
         if (!scheduleResult) {
@@ -2296,6 +2354,7 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
         }
         
+        pushArchiveHistory();
         let addedCount = 0;
         courses.forEach(c => {
             const exists = savedSchedules.some(s => s.name === c.name && s.date === c.date && s.time === c.time);
@@ -2305,16 +2364,18 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         });
         
-        localStorage.setItem("saved_schedules", JSON.stringify(savedSchedules));
         renderArchiveTable();
-        alert(`已成功儲存當前排課結果！共新增了 ${addedCount} 筆排程存檔。`);
+        updateArchiveSaveBtnState();
+        showUploadStatus(`已成功載入當前排課結果！共新增了 ${addedCount} 筆排程暫存存檔。請點擊「儲存變更」以寫入瀏覽器。`, "warning");
     });
 
     clearArchiveBtn.addEventListener("click", () => {
         if (confirm("您確定要清空所有的排程存檔嗎？此動作無法復原。")) {
+            pushArchiveHistory();
             savedSchedules = [];
-            localStorage.setItem("saved_schedules", JSON.stringify(savedSchedules));
             renderArchiveTable();
+            updateArchiveSaveBtnState();
+            showUploadStatus("已清空存檔暫存。請點擊「儲存變更」以寫入瀏覽器。", "warning");
         }
     });
 
