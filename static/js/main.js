@@ -2252,6 +2252,10 @@ document.addEventListener("DOMContentLoaded", () => {
                         savedSchedules[archiveRowIndex].time = `${String(slot.startHour).padStart(2, "0")}:00 - ${String((slot.startHour + currentCourse.duration) % 24).padStart(2, "0")}:00`;
                         savedSchedules[archiveRowIndex].duration = currentCourse.duration;
                         renderArchiveTable();
+                        renderCalendar(uploadedMonthCode);
+                        renderHeatmap();
+                        const minCoverage = parseInt(document.getElementById("coverage-select").value, 10) || 0;
+                        renderStats(minCoverage);
                         updateArchiveSaveBtnState();
                         altModal.classList.add("hidden");
                         showUploadStatus(`已更新暫存排程：將 ${agentName} 的時段變更為 ${slot.date} ${savedSchedules[archiveRowIndex].time}，請記得點擊「儲存變更」以永久儲存。`, "warning");
@@ -2586,6 +2590,13 @@ document.addEventListener("DOMContentLoaded", () => {
         } else {
             archiveWarningContainer.classList.add("hidden");
             archiveWarningList.innerHTML = "";
+        }
+        
+        if (!scheduleResult && uploadedMonthCode) {
+            renderCalendar(uploadedMonthCode);
+            renderHeatmap();
+            const minCoverage = parseInt(document.getElementById("coverage-select").value, 10) || 0;
+            renderStats(minCoverage);
         }
     }
 
