@@ -78,7 +78,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const saveCurrentBtn = document.getElementById("save-current-btn");
     const clearArchiveBtn = document.getElementById("clear-archive-btn");
     const archiveUndoBtn = document.getElementById("archive-undo-btn");
-    const saveArchiveChangesBtn = document.getElementById("save-archive-changes-btn");
     const archiveWarningContainer = document.getElementById("archive-warning-container");
     const archiveWarningList = document.getElementById("archive-warning-list");
 
@@ -2256,9 +2255,9 @@ document.addEventListener("DOMContentLoaded", () => {
                         renderHeatmap();
                         const minCoverage = parseInt(document.getElementById("coverage-select").value, 10) || 0;
                         renderStats(minCoverage);
-                        updateArchiveSaveBtnState();
+                        autoSaveArchive();
                         altModal.classList.add("hidden");
-                        showUploadStatus(`已更新暫存排程：將 ${agentName} 的時段變更為 ${slot.date} ${savedSchedules[archiveRowIndex].time}，請記得點擊「儲存變更」以永久儲存。`, "warning");
+                        showUploadStatus(`已更新暫存排程：將 ${agentName} 的時段變更為 ${slot.date} ${savedSchedules[archiveRowIndex].time}，並已自動儲存至瀏覽器！`, "success");
                     } else {
                         moveCourseToSlot(agentName, currentCourse, slot);
                     }
@@ -2387,159 +2386,23 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // Archive / Saved Schedules Logic
+    // Archive / Saved Schedules Logic
     function renderArchiveTable() {
         archiveTableBody.innerHTML = "";
         if (savedSchedules.length === 0) {
             archiveTableBody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">無排程存檔紀錄</td></tr>`;
+            archiveWarningContainer.classList.add("hidden");
+            archiveWarningList.innerHTML = "";
             return;
         }
-        
-        savedSchedules.forEach((item, index) => {
-            // Validate the row against initData and scheduleResult
-            let statusHTML = "";
-            let violated = false;
-            
-            if (!initData.dates || initData.dates.length === 0) {
-                statusHTML = `<span class="status-indicator-inline" style="background: rgba(255,255,255,0.05); color: var(--text-muted); padding: 4px 8px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.1); font-size: 0.8rem;"><i class="fa-solid fa-file-excel" style="margin-right: 4px;"></i>請先上傳班表</span>`;
-            } else {
-                const agentInfo = initData.agents[item.name];
-                if (!agentInfo) {
-                    statusHTML = `<span class="status-indicator-inline danger" style="background: rgba(239,68,68,0.15); color: #f87171; padding: 4px 8px; border-radius: 4px; border: 1px solid rgba(239,68,68,0.3); font-size: 0.8rem;"><i class="fa-solid fa-circle-exclamation" style="margin-right: 4px;"></i>找不到同仁資料</span>`;
-                    violated = true;
-                } else {
-                    const date = item.date;
-                    const cellVal = agentInfo.schedule[date];
-                    const startHour = getAgentShiftHours(cellVal);
-                    
-                    if (startHour === null) {
-                        statusHTML = `<span class="status-indicator-inline danger" style="background: rgba(239,68,68,0.15); color: #f87171; padding: 4px 8px; border-radius: 4px; border: 1px solid rgba(239,68,68,0.3); font-size: 0.8rem;" title="當天是 OFF / 請假 / 未上班"><i class="fa-solid fa-calendar-xmark" style="margin-right: 4px;"></i>當天非上班日</span>`;
-                        violated = true;
-                    } else {
-                        // Parse time range
-                        const parsedTime = item.time.split(" - ");
-                        const hStart = parseInt(parsedTime[0].split(":")[0], 10);
-                        const duration = item.duration;
-                        
-                        const shiftHours = [];
-                        for (let i = 0; i < 9; i++) {
-                            shiftHours.push((startHour + i) % 24);
-                        }
-                        
-                        // Check if course hours are fully inside shiftHours
-                        let inShift = true;
-                        const courseHours = [];
-                        for (let i = 0; i < duration; i++) {
-                            const h = (hStart + i) % 24;
-                            courseHours.push(h);
-                            if (!shiftHours.includes(h)) {
-                                inShift = false;
-                            }
-                        }
-                        
-                        if (!inShift) {
-                            statusHTML = `<span class="status-indicator-inline danger" style="background: rgba(239,68,68,0.15); color: #f87171; padding: 4px 8px; border-radius: 4px; border: 1px solid rgba(239,68,68,0.3); font-size: 0.8rem;" title="排課時段超出該班別上班時間"><i class="fa-solid fa-clock" style="margin-right: 4px;"></i>超出上班時段</span>`;
-                            violated = true;
-                        } else {
-                            // Check meal hours
-                            let mealOverlap = false;
-                            let mealHours = [];
-                            if (scheduleResult && scheduleResult.daily_meal_hours && scheduleResult.daily_meal_hours[date] && scheduleResult.daily_meal_hours[date][item.name] !== undefined) {
-                                mealHours = [scheduleResult.daily_meal_hours[date][item.name]];
-                            } else {
-                                mealHours = parseMealHours(agentInfo.meal, startHour);
-                            }
-                            
-                            courseHours.forEach(h => {
-                                if (mealHours.includes(h)) {
-                                    mealOverlap = true;
-                                }
-                            });
-                            
-                            if (mealOverlap) {
-                                statusHTML = `<span class="status-indicator-inline danger" style="background: rgba(239,68,68,0.15); color: #f87171; padding: 4px 8px; border-radius: 4px; border: 1px solid rgba(239,68,68,0.3); font-size: 0.8rem;" title="排課時段與同仁用餐時間重疊"><i class="fa-solid fa-utensils" style="margin-right: 4px;"></i>與用餐時段重疊</span>`;
-                                violated = true;
-                            } else {
-                                // Check duty agent
-                                const isDuty = initData.dutyAgents && initData.dutyAgents[date] && initData.dutyAgents[date].includes(item.name);
-                                if (isDuty) {
-                                    statusHTML = `<span class="status-indicator-inline danger" style="background: rgba(239,68,68,0.15); color: #f87171; padding: 4px 8px; border-radius: 4px; border: 1px solid rgba(239,68,68,0.3); font-size: 0.8rem;" title="同仁當日擔任值日生，不應安排課程/會議"><i class="fa-solid fa-user-shield" style="margin-right: 4px;"></i>當日擔任值日生</span>`;
-                                    violated = true;
-                                } else {
-                                    // Check coverage threshold
-                                    let coverageLow = false;
-                                    let minCovVal = null;
-                                    if (scheduleResult && scheduleResult.coverage_timeline && scheduleResult.coverage_timeline[date]) {
-                                        const timeline = scheduleResult.coverage_timeline[date];
-                                        const minCoverageThreshold = parseInt(document.getElementById("coverage-select").value, 10) || 0;
-                                        
-                                        const hourCoverages = courseHours.map(h => {
-                                            const entry = timeline.find(t => t.hour === h);
-                                            return entry ? entry.after : 0;
-                                        });
-                                        minCovVal = Math.min(...hourCoverages);
-                                        if (minCovVal < minCoverageThreshold) {
-                                            coverageLow = true;
-                                        }
-                                    }
-                                    
-                                    if (coverageLow) {
-                                        statusHTML = `<span class="status-indicator-inline danger" style="background: rgba(239,68,68,0.15); color: #f87171; padding: 4px 8px; border-radius: 4px; border: 1px solid rgba(239,68,68,0.3); font-size: 0.8rem;" title="時段內的在線人力 (${minCovVal}位) 低於安全門檻"><i class="fa-solid fa-users-slash" style="margin-right: 4px;"></i>在線人力不足 (${minCovVal}位)</span>`;
-                                        violated = true;
-                                    } else {
-                                        statusHTML = `<span class="status-indicator-inline success" style="background: rgba(16,185,129,0.15); color: #34d399; padding: 4px 8px; border-radius: 4px; border: 1px solid rgba(16,185,129,0.3); font-size: 0.8rem;"><i class="fa-solid fa-circle-check" style="margin-right: 4px;"></i>符合安全規範</span>`;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
 
-            const tr = document.createElement("tr");
-            tr.innerHTML = `
-                <td class="strong">${item.name}</td>
-                <td>${item.date}</td>
-                <td>${item.time}</td>
-                <td>${item.duration} 小時</td>
-                <td>${statusHTML}</td>
-                <td>
-                    <button class="edit-archive-btn" style="padding: 4px 8px; font-size: 0.8rem; background: rgba(13, 148, 136, 0.1); border: 1px solid rgba(13, 148, 136, 0.3); color: var(--primary); border-radius: 4px; font-weight: 500; cursor: pointer; margin-right: 6px;"><i class="fa-solid fa-pen-to-square"></i> 調整</button>
-                    <button class="delete-archive-btn" style="padding: 4px 8px; font-size: 0.8rem; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); color: #f87171; border-radius: 4px; font-weight: 500; cursor: pointer;"><i class="fa-solid fa-trash-can"></i> 刪除</button>
-                </td>
-            `;
-            
-            const editBtn = tr.querySelector(".edit-archive-btn");
-            editBtn.addEventListener("click", (e) => {
-                e.stopPropagation();
-                // Parse time range
-                const parsedTime = item.time.split(" - ");
-                const startHour = parseInt(parsedTime[0].split(":")[0], 10);
-                const endHour = parseInt(parsedTime[1].split(":")[0], 10);
-                const tempCourse = {
-                    agent: item.name,
-                    date: item.date,
-                    start_hour: startHour,
-                    end_hour: endHour,
-                    duration: item.duration,
-                    course_number: index + 1
-                };
-                showAlternativeSlots(item.name, index + 1, tempCourse, index);
-            });
-
-            const delBtn = tr.querySelector(".delete-archive-btn");
-            delBtn.addEventListener("click", (e) => {
-                e.stopPropagation();
-                pushArchiveHistory();
-                savedSchedules.splice(index, 1);
-                renderArchiveTable();
-                updateArchiveSaveBtnState();
-            });
-            
-            archiveTableBody.appendChild(tr);
-        });
-        
-        // Find overlapping individual schedule slots in archives
+        // 1. Precompute overlaps
         const overlaps = [];
+        const rowOverlaps = {};
+        savedSchedules.forEach((_, idx) => {
+            rowOverlaps[idx] = [];
+        });
+
         for (let i = 0; i < savedSchedules.length; i++) {
             const item1 = savedSchedules[i];
             const parsedTime1 = item1.time.split(" - ");
@@ -2574,9 +2437,165 @@ document.addEventListener("DOMContentLoaded", () => {
                         agent2: item2.name,
                         time2: item2.time
                     });
+                    rowOverlaps[i].push(item2.name);
+                    rowOverlaps[j].push(item1.name);
                 }
             }
         }
+        
+        savedSchedules.forEach((item, index) => {
+            // Validate the row against initData and scheduleResult
+            const statusBadges = [];
+            let violated = false;
+            
+            if (!initData.dates || initData.dates.length === 0) {
+                statusBadges.push(`<span class="status-indicator-inline" style="background: rgba(255,255,255,0.05); color: var(--text-muted); padding: 4px 8px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.1); font-size: 0.8rem;"><i class="fa-solid fa-file-excel" style="margin-right: 4px;"></i>請先上傳班表</span>`);
+            } else {
+                const agentInfo = initData.agents[item.name];
+                if (!agentInfo) {
+                    statusBadges.push(`<span class="status-indicator-inline danger" style="background: rgba(239,68,68,0.15); color: #f87171; padding: 4px 8px; border-radius: 4px; border: 1px solid rgba(239,68,68,0.3); font-size: 0.8rem;"><i class="fa-solid fa-circle-exclamation" style="margin-right: 4px;"></i>找不到同仁資料</span>`);
+                    violated = true;
+                } else {
+                    const date = item.date;
+                    const cellVal = agentInfo.schedule[date];
+                    const startHour = getAgentShiftHours(cellVal);
+                    
+                    if (startHour === null) {
+                        statusBadges.push(`<span class="status-indicator-inline danger" style="background: rgba(239,68,68,0.15); color: #f87171; padding: 4px 8px; border-radius: 4px; border: 1px solid rgba(239,68,68,0.3); font-size: 0.8rem;" title="當天是 OFF / 請假 / 未上班"><i class="fa-solid fa-calendar-xmark" style="margin-right: 4px;"></i>當天非上班日</span>`);
+                        violated = true;
+                    } else {
+                        // Parse time range
+                        const parsedTime = item.time.split(" - ");
+                        const hStart = parseInt(parsedTime[0].split(":")[0], 10);
+                        const duration = item.duration;
+                        
+                        const shiftHours = [];
+                        for (let i = 0; i < 9; i++) {
+                            shiftHours.push((startHour + i) % 24);
+                        }
+                        
+                        // Check if course hours are fully inside shiftHours
+                        let inShift = true;
+                        const courseHours = [];
+                        for (let i = 0; i < duration; i++) {
+                            const h = (hStart + i) % 24;
+                            courseHours.push(h);
+                            if (!shiftHours.includes(h)) {
+                                inShift = false;
+                            }
+                        }
+                        
+                        if (!inShift) {
+                            statusBadges.push(`<span class="status-indicator-inline danger" style="background: rgba(239,68,68,0.15); color: #f87171; padding: 4px 8px; border-radius: 4px; border: 1px solid rgba(239,68,68,0.3); font-size: 0.8rem;" title="排課時段超出該班別上班時間"><i class="fa-solid fa-clock" style="margin-right: 4px;"></i>超出上班時段</span>`);
+                            violated = true;
+                        } else {
+                            // Check meal hours
+                            let mealOverlap = false;
+                            let mealHours = [];
+                            if (scheduleResult && scheduleResult.daily_meal_hours && scheduleResult.daily_meal_hours[date] && scheduleResult.daily_meal_hours[date][item.name] !== undefined) {
+                                mealHours = [scheduleResult.daily_meal_hours[date][item.name]];
+                            } else {
+                                mealHours = parseMealHours(agentInfo.meal, startHour);
+                            }
+                            
+                            courseHours.forEach(h => {
+                                if (mealHours.includes(h)) {
+                                    mealOverlap = true;
+                                }
+                            });
+                            
+                            if (mealOverlap) {
+                                statusBadges.push(`<span class="status-indicator-inline danger" style="background: rgba(239,68,68,0.15); color: #f87171; padding: 4px 8px; border-radius: 4px; border: 1px solid rgba(239,68,68,0.3); font-size: 0.8rem;" title="排課時段與同仁用餐時間重疊"><i class="fa-solid fa-utensils" style="margin-right: 4px;"></i>與用餐時段重疊</span>`);
+                                violated = true;
+                            } else {
+                                // Check duty agent
+                                const isDuty = initData.dutyAgents && initData.dutyAgents[date] && initData.dutyAgents[date].includes(item.name);
+                                if (isDuty) {
+                                    statusBadges.push(`<span class="status-indicator-inline danger" style="background: rgba(239,68,68,0.15); color: #f87171; padding: 4px 8px; border-radius: 4px; border: 1px solid rgba(239,68,68,0.3); font-size: 0.8rem;" title="同仁當日擔任值日生，不應安排課程/會議"><i class="fa-solid fa-user-shield" style="margin-right: 4px;"></i>當日擔任值日生</span>`);
+                                    violated = true;
+                                } else {
+                                    // Check coverage threshold
+                                    let coverageLow = false;
+                                    let minCovVal = null;
+                                    if (scheduleResult && scheduleResult.coverage_timeline && scheduleResult.coverage_timeline[date]) {
+                                        const timeline = scheduleResult.coverage_timeline[date];
+                                        const minCoverageThreshold = parseInt(document.getElementById("coverage-select").value, 10) || 0;
+                                        
+                                        const hourCoverages = courseHours.map(h => {
+                                            const entry = timeline.find(t => t.hour === h);
+                                            return entry ? entry.after : 0;
+                                        });
+                                        minCovVal = Math.min(...hourCoverages);
+                                        if (minCovVal < minCoverageThreshold) {
+                                            coverageLow = true;
+                                        }
+                                    }
+                                    
+                                    if (coverageLow) {
+                                        statusBadges.push(`<span class="status-indicator-inline danger" style="background: rgba(239,68,68,0.15); color: #f87171; padding: 4px 8px; border-radius: 4px; border: 1px solid rgba(239,68,68,0.3); font-size: 0.8rem;" title="時段內的在線人力 (${minCovVal}位) 低於安全門檻"><i class="fa-solid fa-users-slash" style="margin-right: 4px;"></i>在線人力不足 (${minCovVal}位)</span>`);
+                                        violated = true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Overlap warning badge
+            if (rowOverlaps[index] && rowOverlaps[index].length > 0) {
+                const uniqueNames = Array.from(new Set(rowOverlaps[index]));
+                statusBadges.push(`<span class="status-indicator-inline danger" style="background: rgba(245,158,11,0.15); color: #fbbf24; border: 1px solid rgba(245,158,11,0.3); padding: 4px 8px; border-radius: 4px; font-size: 0.8rem;" title="與 ${uniqueNames.join(', ')} 同時段上課"><i class="fa-solid fa-triangle-exclamation" style="margin-right: 4px;"></i>與 ${uniqueNames.join(', ')} 重疊</span>`);
+                violated = true;
+            }
+            
+            if (statusBadges.length === 0) {
+                statusBadges.push(`<span class="status-indicator-inline success" style="background: rgba(16,185,129,0.15); color: #34d399; padding: 4px 8px; border-radius: 4px; border: 1px solid rgba(16,185,129,0.3); font-size: 0.8rem;"><i class="fa-solid fa-circle-check" style="margin-right: 4px;"></i>符合安全規範</span>`);
+            }
+            
+            const statusHTML = statusBadges.join(" ");
+
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+                <td class="strong">${item.name}</td>
+                <td>${item.date}</td>
+                <td>${item.time}</td>
+                <td>${item.duration} 小時</td>
+                <td>${statusHTML}</td>
+                <td>
+                    <button class="edit-archive-btn" style="padding: 4px 8px; font-size: 0.8rem; background: rgba(13, 148, 136, 0.1); border: 1px solid rgba(13, 148, 136, 0.3); color: var(--primary); border-radius: 4px; font-weight: 500; cursor: pointer; margin-right: 6px;"><i class="fa-solid fa-pen-to-square"></i> 調整</button>
+                    <button class="delete-archive-btn" style="padding: 4px 8px; font-size: 0.8rem; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); color: #f87171; border-radius: 4px; font-weight: 500; cursor: pointer;"><i class="fa-solid fa-trash-can"></i> 刪除</button>
+                </td>
+            `;
+            
+            const editBtn = tr.querySelector(".edit-archive-btn");
+            editBtn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                const parsedTime = item.time.split(" - ");
+                const startHour = parseInt(parsedTime[0].split(":")[0], 10);
+                const endHour = parseInt(parsedTime[1].split(":")[0], 10);
+                const tempCourse = {
+                    agent: item.name,
+                    date: item.date,
+                    start_hour: startHour,
+                    end_hour: endHour,
+                    duration: item.duration,
+                    course_number: index + 1
+                };
+                showAlternativeSlots(item.name, index + 1, tempCourse, index);
+            });
+
+            const delBtn = tr.querySelector(".delete-archive-btn");
+            delBtn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                pushArchiveHistory();
+                savedSchedules.splice(index, 1);
+                renderArchiveTable();
+                autoSaveArchive();
+            });
+            
+            archiveTableBody.appendChild(tr);
+        });
         
         // Render warning notifications at the bottom of the table
         if (overlaps.length > 0) {
@@ -2621,26 +2640,9 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    function updateArchiveSaveBtnState() {
-        const currentSavedStr = localStorage.getItem("saved_schedules") || JSON.stringify(defaultSavedSchedules);
-        const inMemoryStr = JSON.stringify(savedSchedules);
-        
-        if (currentSavedStr !== inMemoryStr) {
-            saveArchiveChangesBtn.style.background = "#eab308";
-            saveArchiveChangesBtn.style.boxShadow = "0 4px 12px rgba(234, 179, 8, 0.4)";
-            saveArchiveChangesBtn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> 儲存變更 *';
-        } else {
-            saveArchiveChangesBtn.style.background = "var(--primary)";
-            saveArchiveChangesBtn.style.boxShadow = "0 4px 12px rgba(13, 148, 136, 0.3)";
-            saveArchiveChangesBtn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> 儲存變更';
-        }
-    }
-
-    saveArchiveChangesBtn.addEventListener("click", () => {
+    function autoSaveArchive() {
         localStorage.setItem("saved_schedules", JSON.stringify(savedSchedules));
-        updateArchiveSaveBtnState();
-        showUploadStatus("已成功將所有存檔變更儲存至瀏覽器！", "success");
-    });
+    }
 
     archiveUndoBtn.addEventListener("click", () => {
         if (archiveHistory.length > 0) {
@@ -2648,8 +2650,8 @@ document.addEventListener("DOMContentLoaded", () => {
             savedSchedules = JSON.parse(prevStateStr);
             renderArchiveTable();
             updateArchiveUndoBtnState();
-            updateArchiveSaveBtnState();
-            showUploadStatus("已還原上一次的存檔操作。", "success");
+            autoSaveArchive();
+            showUploadStatus("已還原上一次的存檔操作，並自動儲存至瀏覽器。", "success");
         }
     });
 
@@ -2687,8 +2689,8 @@ document.addEventListener("DOMContentLoaded", () => {
         });
         
         renderArchiveTable();
-        updateArchiveSaveBtnState();
-        showUploadStatus(`已成功載入當前排課結果！共新增了 ${addedCount} 筆排程暫存存檔。請點擊「儲存變更」以寫入瀏覽器。`, "warning");
+        autoSaveArchive();
+        showUploadStatus(`已成功將當前排課結果（共新增了 ${addedCount} 筆排程）儲存至瀏覽器存檔中！`, "success");
     });
 
     clearArchiveBtn.addEventListener("click", () => {
@@ -2696,8 +2698,8 @@ document.addEventListener("DOMContentLoaded", () => {
             pushArchiveHistory();
             savedSchedules = [];
             renderArchiveTable();
-            updateArchiveSaveBtnState();
-            showUploadStatus("已清空存檔暫存。請點擊「儲存變更」以寫入瀏覽器。", "warning");
+            autoSaveArchive();
+            showUploadStatus("已清空存檔，並將變減儲存至瀏覽器。", "success");
         }
     });
 
