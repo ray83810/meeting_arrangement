@@ -3117,35 +3117,115 @@ document.addEventListener("DOMContentLoaded", () => {
                 totalNeeded += 1;
             }
 
+            const items1Hour = [];
+            const items2Hour = [];
             coursesNeeded.forEach(cReq => {
-                const limitMonth = cReq.limit;
-                const availMonths = [];
+                const is2Hour = (cReq.course === "高齡課程" || cReq.course === "洗防課程");
+                for (let i = 0; i < cReq.count; i++) {
+                    if (is2Hour) {
+                        items2Hour.push({ course: cReq.course, limit: cReq.limit });
+                    } else {
+                        items1Hour.push({ course: cReq.course, limit: cReq.limit });
+                    }
+                }
+            });
+
+            // Sort by earliest deadline first (EDF)
+            items1Hour.sort((a, b) => a.limit.localeCompare(b.limit));
+            items2Hour.sort((a, b) => a.limit.localeCompare(b.limit));
+
+            const alloc1 = {};
+            const alloc2 = {};
+            monthList.forEach(m => {
+                alloc1[m] = [];
+                alloc2[m] = [];
+            });
+
+            function getAvailMonthsForLimit(limitMonth) {
+                const avail = [];
                 let [sY, sM] = startMonthStr.split("-").map(Number);
                 let [lY, lM] = limitMonth.split("-").map(Number);
-                
+                if (isNaN(sY) || isNaN(sM) || isNaN(lY) || isNaN(lM)) {
+                    return [startMonthStr];
+                }
                 let cy = sY, cm = sM;
                 while (cy < lY || (cy === lY && cm <= lM)) {
-                    availMonths.push(`${cy}-${String(cm).padStart(2, "0")}`);
+                    avail.push(`${cy}-${String(cm).padStart(2, "0")}`);
                     cm++;
                     if (cm > 12) {
                         cm = 1;
                         cy++;
                     }
                 }
-                
-                if (availMonths.length === 0) {
-                    availMonths.push(startMonthStr);
-                }
+                return avail.length > 0 ? avail : [startMonthStr];
+            }
 
-                const baseCount = Math.floor(cReq.count / availMonths.length);
-                const remainder = cReq.count % availMonths.length;
+            // Distribute 1-hour items (target cap: 2 per month)
+            items1Hour.forEach(item => {
+                const avail = getAvailMonthsForLimit(item.limit);
+                let bestMonth = null;
+                let minCount = Infinity;
                 
-                availMonths.forEach((m, idx) => {
-                    if (monthlyPlans[m] && monthlyPlans[m][name]) {
-                        const planned = baseCount + (idx < remainder ? 1 : 0);
-                        if (planned > 0) {
-                            monthlyPlans[m][name][cReq.course] = planned;
+                const monthsBelowCap = avail.filter(m => (alloc1[m] || []).length < 2);
+                if (monthsBelowCap.length > 0) {
+                    monthsBelowCap.forEach(m => {
+                        const count = (alloc1[m] || []).length;
+                        if (count < minCount) {
+                            minCount = count;
+                            bestMonth = m;
                         }
+                    });
+                } else {
+                    avail.forEach(m => {
+                        const count = (alloc1[m] || []).length;
+                        if (count < minCount) {
+                            minCount = count;
+                            bestMonth = m;
+                        }
+                    });
+                }
+                
+                if (bestMonth) {
+                    alloc1[bestMonth].push(item.course);
+                }
+            });
+
+            // Distribute 2-hour items (target cap: 1 per month)
+            items2Hour.forEach(item => {
+                const avail = getAvailMonthsForLimit(item.limit);
+                let bestMonth = null;
+                let minCount = Infinity;
+                
+                const monthsBelowCap = avail.filter(m => (alloc2[m] || []).length < 1);
+                if (monthsBelowCap.length > 0) {
+                    monthsBelowCap.forEach(m => {
+                        const count = (alloc2[m] || []).length;
+                        if (count < minCount) {
+                            minCount = count;
+                            bestMonth = m;
+                        }
+                    });
+                } else {
+                    avail.forEach(m => {
+                        const count = (alloc2[m] || []).length;
+                        if (count < minCount) {
+                            minCount = count;
+                            bestMonth = m;
+                        }
+                    });
+                }
+                
+                if (bestMonth) {
+                    alloc2[bestMonth].push(item.course);
+                }
+            });
+
+            // Populated to monthlyPlans
+            monthList.forEach(m => {
+                const combined = [...(alloc1[m] || []), ...(alloc2[m] || [])];
+                combined.forEach(courseName => {
+                    if (monthlyPlans[m] && monthlyPlans[m][name]) {
+                        monthlyPlans[m][name][courseName] = (monthlyPlans[m][name][courseName] || 0) + 1;
                     }
                 });
             });
