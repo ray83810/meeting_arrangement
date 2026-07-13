@@ -465,9 +465,14 @@
                             <!-- Flex container for progress and monthly plan split -->
                             <div class="training-main-layout" style="display: flex; gap: 20px; flex: 1; min-height: 0;">
                                 <!-- Left side: Student status list -->
-                                <div class="training-side-card" style="flex: 1; width: 50%; min-width: 0; display: flex; flex-direction: column; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 16px; min-height: 0;">
-                                    <h5 style="margin: 0 0 12px 0; font-size: 0.95rem; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 6px;">
-                                        <i class="fa-solid fa-users" style="color: var(--primary-light);"></i> 客服同仁證照完訓進度總覽
+                                <div class="training-side-card" id="training-progress-card" style="flex: 1; width: 50%; min-width: 0; display: flex; flex-direction: column; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 16px; min-height: 0;">
+                                    <h5 style="margin: 0 0 12px 0; font-size: 0.95rem; font-weight: 700; color: #fff; display: flex; align-items: center; justify-content: space-between;">
+                                        <div style="display: flex; align-items: center; gap: 6px;">
+                                            <i class="fa-solid fa-users" style="color: var(--primary-light);"></i> 客服同仁證照完訓進度總覽
+                                        </div>
+                                        <button class="expand-btn" id="expand-progress-btn" title="放大檢視">
+                                            <i class="fa-solid fa-expand"></i>
+                                        </button>
                                     </h5>
                                     <div class="table-wrapper" style="border: 1px solid var(--border-color); border-radius: 8px; overflow-y: auto; flex: 1;">
                                         <table class="schedule-table" style="font-size: 11px;">
@@ -488,9 +493,14 @@
                                 </div>
 
                                 <!-- Right side: Planning by months -->
-                                <div class="training-plan-card" style="flex: 1; width: 50%; min-width: 0; display: flex; flex-direction: column; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 16px; min-height: 0;">
-                                    <h5 style="margin: 0 0 12px 0; font-size: 0.95rem; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 6px;">
-                                        <i class="fa-solid fa-calendar-check" style="color: var(--primary-light);"></i> 後續月份課程規劃表 (前 3 個月完成)
+                                <div class="training-plan-card" id="training-schedule-card" style="flex: 1; width: 50%; min-width: 0; display: flex; flex-direction: column; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 16px; min-height: 0;">
+                                    <h5 style="margin: 0 0 12px 0; font-size: 0.95rem; font-weight: 700; color: #fff; display: flex; align-items: center; justify-content: space-between;">
+                                        <div style="display: flex; align-items: center; gap: 6px;">
+                                            <i class="fa-solid fa-calendar-check" style="color: var(--primary-light);"></i> 後續月份課程規劃表 (前 3 個月完成)
+                                        </div>
+                                        <button class="expand-btn" id="expand-plan-btn" title="放大檢視">
+                                            <i class="fa-solid fa-expand"></i>
+                                        </button>
                                     </h5>
                                     <!-- Monthly plan carousel or scrollable container -->
                                     <div id="training-months-container" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; padding-right: 4px;">

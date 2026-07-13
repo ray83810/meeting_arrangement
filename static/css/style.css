@@ -2061,4 +2061,64 @@ select:focus {
     transition: width 0.3s ease;
 }
 
+/* Fullscreen Mode for Training Planner Panels */
+.training-side-card.fullscreen-mode,
+.training-plan-card.fullscreen-mode {
+    position: fixed !important;
+    top: 5vh !important;
+    left: 5vw !important;
+    width: 90vw !important;
+    height: 90vh !important;
+    z-index: 9999 !important;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8) !important;
+    background: #0f172a !important; /* Premium deep dark background */
+    border: 1px solid rgba(13, 148, 136, 0.5) !important;
+    margin: 0 !important;
+    animation: fullscreen-fadein 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.training-side-card.fullscreen-mode::before,
+.training-plan-card.fullscreen-mode::before {
+    content: "";
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(4, 9, 20, 0.7);
+    backdrop-filter: blur(8px);
+    z-index: -1;
+}
+
+.expand-btn {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 1rem;
+    padding: 6px;
+    border-radius: 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.expand-btn:hover {
+    color: var(--primary-light) !important;
+    background: rgba(255, 255, 255, 0.05);
+    transform: scale(1.1);
+}
+
+@keyframes fullscreen-fadein {
+    from {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
 

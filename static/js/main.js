@@ -3316,6 +3316,49 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
+    // Fullscreen Expansion Listeners for Training Planner Tab
+    const expandProgressBtn = document.getElementById("expand-progress-btn");
+    const expandPlanBtn = document.getElementById("expand-plan-btn");
+    const progressCard = document.getElementById("training-progress-card");
+    const scheduleCard = document.getElementById("training-schedule-card");
+
+    function toggleFullscreen(card, btn) {
+        const isFullscreen = card.classList.toggle("fullscreen-mode");
+        const icon = btn.querySelector("i");
+        if (icon) {
+            icon.className = isFullscreen ? "fa-solid fa-compress" : "fa-solid fa-expand";
+        }
+        btn.setAttribute("title", isFullscreen ? "縮小檢視" : "放大檢視");
+    }
+
+    if (expandProgressBtn && progressCard) {
+        expandProgressBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            toggleFullscreen(progressCard, expandProgressBtn);
+            if (scheduleCard && scheduleCard.classList.contains("fullscreen-mode")) {
+                toggleFullscreen(scheduleCard, expandPlanBtn);
+            }
+        });
+    }
+
+    if (expandPlanBtn && scheduleCard) {
+        expandPlanBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            toggleFullscreen(scheduleCard, expandPlanBtn);
+            if (progressCard && progressCard.classList.contains("fullscreen-mode")) {
+                toggleFullscreen(progressCard, expandProgressBtn);
+            }
+        });
+    }
+
+    document.addEventListener("click", (e) => {
+        const fullscreenCard = document.querySelector(".training-side-card.fullscreen-mode, .training-plan-card.fullscreen-mode");
+        if (fullscreenCard && !fullscreenCard.contains(e.target)) {
+            const btn = fullscreenCard.id === "training-progress-card" ? expandProgressBtn : expandPlanBtn;
+            toggleFullscreen(fullscreenCard, btn);
+        }
+    });
+
     // Initial render
     renderArchiveTable();
 });
