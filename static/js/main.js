@@ -2371,10 +2371,12 @@ document.addEventListener("DOMContentLoaded", () => {
                         savedSchedules[archiveRowIndex].time = `${String(slot.startHour).padStart(2, "0")}:00 - ${String((slot.startHour + currentCourse.duration) % 24).padStart(2, "0")}:00`;
                         savedSchedules[archiveRowIndex].duration = currentCourse.duration;
                         renderArchiveTable();
-                        renderCalendar(uploadedMonthCode);
-                        renderHeatmap();
-                        const minCoverage = parseInt(document.getElementById("coverage-select").value, 10) || 0;
-                        renderStats(minCoverage);
+                        if (uploadedMonthCode) {
+                            renderCalendar(uploadedMonthCode);
+                            renderHeatmap();
+                            const minCoverage = parseInt(document.getElementById("coverage-select").value, 10) || 0;
+                            renderStats(minCoverage);
+                        }
                         autoSaveArchive();
                         altModal.classList.add("hidden");
                         showUploadStatus(`已更新暫存排程：將 ${agentName} 的時段變更為 ${slot.date} ${savedSchedules[archiveRowIndex].time}，並已自動儲存至瀏覽器！`, "success");
@@ -2724,10 +2726,12 @@ document.addEventListener("DOMContentLoaded", () => {
                     
                     autoSaveArchive();
                     renderArchiveTable();
-                    renderCalendar(uploadedMonthCode);
-                    renderHeatmap();
-                    const minCoverage = parseInt(document.getElementById("coverage-select").value, 10) || 0;
-                    renderStats(minCoverage);
+                    if (uploadedMonthCode) {
+                        renderCalendar(uploadedMonthCode);
+                        renderHeatmap();
+                        const minCoverage = parseInt(document.getElementById("coverage-select").value, 10) || 0;
+                        renderStats(minCoverage);
+                    }
                     if (trainingData) {
                         renderTrainingTab();
                     }
