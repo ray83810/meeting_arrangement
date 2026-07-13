@@ -21,7 +21,15 @@ document.addEventListener("DOMContentLoaded", () => {
         { name: "Howard Chen", date: "2026-07-21", time: "15:00 - 17:00", duration: 2 },
         { name: "Jacky Lee", date: "2026-07-21", time: "16:00 - 17:00", duration: 1 }
     ];
-    let savedSchedules = JSON.parse(localStorage.getItem("saved_schedules")) || defaultSavedSchedules;
+    let savedSchedules = defaultSavedSchedules;
+    try {
+        const storedSchedules = localStorage.getItem("saved_schedules");
+        if (storedSchedules) {
+            savedSchedules = JSON.parse(storedSchedules);
+        }
+    } catch (e) {
+        console.error("Error parsing saved_schedules from localStorage:", e);
+    }
     let archiveHistory = [];
 
     // DOM Elements
@@ -105,7 +113,15 @@ document.addEventListener("DOMContentLoaded", () => {
     const courseTypeSelect = document.getElementById("course-type-select");
     const durationRadios = document.getElementsByName("course-duration");
 
-    let trainingData = JSON.parse(localStorage.getItem("training_data")) || null;
+    let trainingData = null;
+    try {
+        const storedTraining = localStorage.getItem("training_data");
+        if (storedTraining) {
+            trainingData = JSON.parse(storedTraining);
+        }
+    } catch (e) {
+        console.error("Error parsing training_data from localStorage:", e);
+    }
     let reminderFileDate = localStorage.getItem("training_file_date") || null;
 
     // Initialize application data in upload-only mode
@@ -2972,46 +2988,53 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Render Training Audit & Planning Tab
     function renderTrainingTab() {
-        if (!trainingData || !reminderFileDate) {
+        try {
+            if (!trainingData || !reminderFileDate) {
+                if (trainingFileStatus) {
+                    trainingFileStatus.innerHTML = `
+                        <i class="fa-solid fa-circle-info" style="color: var(--text-muted);"></i>
+                        <span>尚未上傳上課提醒資料</span>
+                    `;
+                }
+                return;
+            }
+
             if (trainingFileStatus) {
                 trainingFileStatus.innerHTML = `
-                    <i class="fa-solid fa-circle-info" style="color: var(--text-muted);"></i>
-                    <span>尚未上傳上課提醒資料</span>
+                    <i class="fa-solid fa-circle-check" style="color: var(--primary-light);"></i>
+                    <span>已載入：${reminderFileDate} 版本</span>
                 `;
             }
-            return;
-        }
-
-        if (trainingFileStatus) {
-            trainingFileStatus.innerHTML = `
-                <i class="fa-solid fa-circle-check" style="color: var(--primary-light);"></i>
-                <span>已載入：${reminderFileDate} 版本</span>
-            `;
-        }
-        if (trainingFileNameText) {
-            trainingFileNameText.innerHTML = `<i class="fa-solid fa-file-excel" style="color: var(--primary-light); margin-right: 6px;"></i>已成功載入上課提醒檔案 (基準日: ${reminderFileDate})`;
-        }
-
-        let maxLimitStr = reminderFileDate.substring(0, 7);
-        
-        function subtractMonths(dateStr, mCount) {
-            let [y, m] = dateStr.substring(0, 7).split("-").map(Number);
-            m -= mCount;
-            while (m <= 0) {
-                m += 12;
-                y -= 1;
+            if (trainingFileNameText) {
+                trainingFileNameText.innerHTML = `<i class="fa-solid fa-file-excel" style="color: var(--primary-light); margin-right: 6px;"></i>已成功載入上課提醒檔案 (基準日: ${reminderFileDate})`;
             }
-            return `${y}-${String(m).padStart(2, "0")}`;
-        }
-        
-        function compareMonths(m1, m2) {
-            return m1.localeCompare(m2);
-        }
 
-        const startMonthStr = reminderFileDate.substring(0, 7);
-        
-        trainingData.forEach(agent => {
-            if ((agent.internalRemaining > 0 || agent.insuranceRemaining > 0) && agent.expiry) {
+            let maxLimitStr = reminderFileDate.substring(0, 7);
+            
+            function subtractMonths(dateStr, mCount) {
+                if (!dateStr || typeof dateStr !== "string") return "2026-09";
+                const parts = dateStr.substring(0, 7).split("-");
+                if (parts.length < 2) return "2026-09";
+                let y = parseInt(parts[0], 10);
+                let m = parseInt(parts[1], 10);
+                if (isNaN(y) || isNaN(m)) return "2026-09";
+                m -= mCount;
+                while (m <= 0) {
+                    m += 12;
+                    y -= 1;
+                }
+                return `${y}-${String(m).padStart(2, "0")}`;
+            }
+            
+            function compareMonths(m1, m2) {
+                return m1.localeCompare(m2);
+            }
+
+            const startMonthStr = reminderFileDate.substring(0, 7);
+            
+            trainingData.forEach(agent => {
+                if (!agent) return;
+                if ((agent.internalRemaining > 0 || agent.insuranceRemaining > 0) && agent.expiry) {
                 const limit = subtractMonths(agent.expiry, 3);
                 if (compareMonths(limit, maxLimitStr) > 0) {
                     maxLimitStr = limit;
@@ -3114,8 +3137,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
             let totalArranged = 0;
             savedSchedules.forEach(item => {
-                if (item.name !== name) return;
-                if (["公司內訓", "保發中心", "高齡課程", "洗防課程", "公平待客"].includes(item.course)) {
+                if (!item || item.name !== name) return;
+                if (item.course && ["公司內訓", "保發中心", "高齡課程", "洗防課程", "公平待客"].includes(item.course)) {
                     totalArranged++;
                 }
             });
@@ -3190,7 +3213,8 @@ document.addEventListener("DOMContentLoaded", () => {
                     if (plannedCourses.length > 0) {
                         const arranged = {};
                         savedSchedules.forEach(item => {
-                            if (item.name !== name) return;
+                            if (!item || item.name !== name) return;
+                            if (!item.date || typeof item.date !== "string") return;
                             const itemMonth = item.date.substring(0, 7);
                             if (itemMonth === m && plannedCourses.includes(item.course)) {
                                 arranged[item.course] = (arranged[item.course] || 0) + 1;
@@ -3271,6 +3295,9 @@ document.addEventListener("DOMContentLoaded", () => {
                 `;
                 trainingMonthsContainer.appendChild(card);
             });
+        }
+        } catch (e) {
+            console.error("Error inside renderTrainingTab:", e);
         }
     }
 
