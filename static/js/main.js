@@ -2855,7 +2855,8 @@ document.addEventListener("DOMContentLoaded", () => {
                     name: agent,
                     date: c.date,
                     time: `${String(c.start_hour).padStart(2, "0")}:00 - ${String(c.end_hour).padStart(2, "0")}:00`,
-                    duration: c.duration
+                    duration: c.duration,
+                    course: c.course || "一般會議"
                 });
             });
         });
