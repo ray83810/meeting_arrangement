@@ -111,9 +111,6 @@ document.addEventListener("DOMContentLoaded", () => {
     // Initialize application data in upload-only mode
     initUploadOnlyMode();
 
-    // Render training tab on load if we have data
-    renderTrainingTab();
-
     // Event Listeners - Checkbox select controls
     selectAllBtn.addEventListener("click", () => toggleAllCheckboxes(true));
     deselectAllBtn.addEventListener("click", () => toggleAllCheckboxes(false));
