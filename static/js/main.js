@@ -2890,6 +2890,19 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
+    function formatExcelDate(val) {
+        if (!val) return "";
+        if (typeof val === "number") {
+            const date = new Date(1899, 11, 30);
+            date.setDate(date.getDate() + Math.floor(val));
+            const y = date.getFullYear();
+            const m = String(date.getMonth() + 1).padStart(2, "0");
+            const d = String(date.getDate()).padStart(2, "0");
+            return `${y}-${m}-${d}`;
+        }
+        return val.toString().trim().split(" ")[0];
+    }
+
     // Training Planner File Upload Handler
     function handleTrainingFileUpload(file) {
         if (!file.name.endsWith(".xlsx")) {
@@ -2933,7 +2946,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     
                     const internalRemaining = parseInt(row["公司內訓-剩餘堂數"], 10) || 0;
                     const insuranceRemaining = parseInt(row["保發中心-剩餘堂數"], 10) || 0;
-                    const expiry = row["訓練到期日"] ? row["訓練到期日"].toString().split(" ")[0] : "";
+                    const expiry = formatExcelDate(row["訓練到期日"]);
                     
                     parsedAgents[name] = {
                         name: name,
@@ -3034,19 +3047,20 @@ document.addEventListener("DOMContentLoaded", () => {
             
             trainingData.forEach(agent => {
                 if (!agent) return;
-                if ((agent.internalRemaining > 0 || agent.insuranceRemaining > 0) && agent.expiry) {
-                const limit = subtractMonths(agent.expiry, 3);
-                if (compareMonths(limit, maxLimitStr) > 0) {
-                    maxLimitStr = limit;
+                const exp = formatExcelDate(agent.expiry);
+                if ((agent.internalRemaining > 0 || agent.insuranceRemaining > 0) && exp) {
+                    const limit = subtractMonths(exp, 3);
+                    if (compareMonths(limit, maxLimitStr) > 0) {
+                        maxLimitStr = limit;
+                    }
                 }
-            }
-            if (!agent.seniorCompleted || !agent.amlCompleted || !agent.fairCompleted) {
-                const limit = "2026-09";
-                if (compareMonths(limit, maxLimitStr) > 0) {
-                    maxLimitStr = limit;
+                if (!agent.seniorCompleted || !agent.amlCompleted || !agent.fairCompleted) {
+                    const limit = "2026-09";
+                    if (compareMonths(limit, maxLimitStr) > 0) {
+                        maxLimitStr = limit;
+                    }
                 }
-            }
-        });
+            });
 
         const monthList = [];
         let [sY, sM] = startMonthStr.split("-").map(Number);
@@ -3078,15 +3092,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
         trainingData.forEach(agent => {
             const name = agent.name;
+            const exp = formatExcelDate(agent.expiry);
             const coursesNeeded = [];
             let totalNeeded = 0;
             
             if (agent.internalRemaining > 0) {
-                coursesNeeded.push({ course: "公司內訓", count: agent.internalRemaining, expiry: agent.expiry, limit: subtractMonths(agent.expiry, 3) });
+                coursesNeeded.push({ course: "公司內訓", count: agent.internalRemaining, expiry: exp, limit: subtractMonths(exp, 3) });
                 totalNeeded += agent.internalRemaining;
             }
             if (agent.insuranceRemaining > 0) {
-                coursesNeeded.push({ course: "保發中心", count: agent.insuranceRemaining, expiry: agent.expiry, limit: subtractMonths(agent.expiry, 3) });
+                coursesNeeded.push({ course: "保發中心", count: agent.insuranceRemaining, expiry: exp, limit: subtractMonths(exp, 3) });
                 totalNeeded += agent.insuranceRemaining;
             }
             if (!agent.seniorCompleted) {
@@ -3145,7 +3160,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
             agentRequiredList.push({
                 name: name,
-                expiry: agent.expiry || "2026-12-31",
+                expiry: exp || "2026-12-31",
                 coursesNeeded: coursesNeeded,
                 totalNeeded: totalNeeded,
                 totalArranged: totalArranged
