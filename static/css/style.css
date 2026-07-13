@@ -2121,4 +2121,18 @@ select:focus {
     }
 }
 
+/* Dropdown Option Styles for High Contrast */
+.archive-course-select,
+.archive-course-select option {
+    background-color: #1e293b !important; /* solid dark gray slate background */
+    color: #ffffff !important;
+}
+
+.archive-course-select:focus {
+    background-color: #1e293b !important;
+    color: #ffffff !important;
+    outline: none;
+    border-color: var(--primary-light) !important;
+}
+
 

@@ -2693,7 +2693,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
             const courseSelectHTML = `
                 <div class="select-wrapper" style="min-width: 120px;">
-                    <select class="archive-course-select" data-index="${index}" style="padding: 4px 8px; font-size: 0.8rem; height: auto; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); border-radius: 4px; color: #fff; width: 100%; cursor: pointer;">
+                    <select class="archive-course-select" data-index="${index}" style="padding: 4px 8px; font-size: 0.8rem; height: auto; background: #1e293b; border: 1px solid var(--border-color); border-radius: 4px; color: #fff; width: 100%; cursor: pointer;">
                         <option value="公司內訓" ${item.course === "公司內訓" ? "selected" : ""}>公司內訓</option>
                         <option value="保發中心" ${item.course === "保發中心" ? "selected" : ""}>保發中心</option>
                         <option value="高齡課程" ${item.course === "高齡課程" ? "selected" : ""}>高齡課程</option>
