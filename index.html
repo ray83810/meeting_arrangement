@@ -76,6 +76,20 @@
                 </div>
 
                 <div class="form-group">
+                    <label for="course-type-select"><i class="fa-solid fa-graduation-cap"></i> 安排課程/會議項目</label>
+                    <div class="select-wrapper">
+                        <select id="course-type-select">
+                            <option value="公司內訓">公司內訓 (1小時)</option>
+                            <option value="保發中心">保發中心 (1小時)</option>
+                            <option value="高齡課程">高齡課程 (2小時)</option>
+                            <option value="洗防課程">洗防課程 (2小時)</option>
+                            <option value="公平待客">公平待客 (1小時)</option>
+                            <option value="其他會議" selected>其他會議 (自訂時長)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group">
                     <label><i class="fa-solid fa-hourglass-half"></i> 課程/會議時長</label>
                     <div class="radio-group-tile">
                         <label class="radio-tile-label">
@@ -211,6 +225,9 @@
                         </button>
                         <button class="tab-btn" data-tab="archive-tab">
                             <i class="fa-solid fa-box-archive"></i> 排程存檔紀錄
+                        </button>
+                        <button class="tab-btn" data-tab="training-tab">
+                            <i class="fa-solid fa-graduation-cap"></i> 證照課程規劃
                         </button>
                     </div>
                 </div>
@@ -351,6 +368,7 @@
                                         <tr>
                                             <th>日期</th>
                                             <th>客服人員</th>
+                                            <th>課程項目</th>
                                             <th>上課時段</th>
                                             <th>課程/會議長度</th>
                                             <th>當日用餐時間</th>
@@ -399,6 +417,7 @@
                                         <tr>
                                             <th>客服人員</th>
                                             <th>日期</th>
+                                            <th>課程項目</th>
                                             <th>上課時段</th>
                                             <th>課程長度</th>
                                             <th>偵測狀態</th>
@@ -418,6 +437,69 @@
                                 <ul id="archive-warning-list" style="margin: 0; padding-left: 20px; font-size: 0.85rem; line-height: 1.5;">
                                     <!-- Dynamically filled -->
                                 </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tab 5: Training Plan and Audit -->
+                    <div id="training-tab" class="tab-panel hidden">
+                        <div class="list-container-box" style="gap: 20px;">
+                            <!-- File Upload Area for Reminder Excel -->
+                            <div class="training-upload-container" style="display: flex; gap: 20px; align-items: center; background: rgba(255, 255, 255, 0.02); border: 1px dashed var(--border-color); border-radius: 12px; padding: 20px;">
+                                <div class="training-upload-dropzone" id="training-upload-zone" style="flex: 1; border: 2px dashed rgba(13, 148, 136, 0.3); border-radius: 8px; padding: 20px; text-align: center; cursor: pointer; transition: all 0.2s;">
+                                    <div class="upload-zone-content">
+                                        <i class="fa-solid fa-file-shield" style="font-size: 28px; color: var(--primary-light); margin-bottom: 8px;"></i>
+                                        <span id="training-file-name-text" style="font-size: 13px; font-weight: 500;">上載「上課提醒」Excel 檔案 (格式: 上課提醒-Call Center_YYYYMMDD.xlsx)</span>
+                                    </div>
+                                    <input type="file" id="training-file-input" accept=".xlsx" style="display: none;">
+                                </div>
+                                <div class="training-upload-info" style="width: 320px; font-size: 0.8rem; line-height: 1.5; color: var(--text-secondary);">
+                                    <div id="training-file-status" class="loaded-month-badge" style="background: rgba(255, 255, 255, 0.05); padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border-color); width: 100%; display: flex; align-items: center; gap: 8px;">
+                                        <i class="fa-solid fa-circle-info" style="color: var(--text-muted);"></i>
+                                        <span>尚未上傳上課提醒資料</span>
+                                    </div>
+                                    <p style="margin-top: 8px; font-size: 11px;"><i class="fa-solid fa-lightbulb" style="color: var(--warning); margin-right: 4px;"></i>上載後將自動儲存於瀏覽器，系統會依檔名日期作為基準月，並在到期前 3 個月為同仁平均分配剩餘課程。</p>
+                                </div>
+                            </div>
+
+                            <!-- Flex container for progress and monthly plan split -->
+                            <div class="training-main-layout" style="display: flex; gap: 20px; flex: 1; min-height: 0;">
+                                <!-- Left side: Student status list -->
+                                <div class="training-side-card" style="width: 380px; display: flex; flex-direction: column; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 16px; min-height: 0;">
+                                    <h5 style="margin: 0 0 12px 0; font-size: 0.95rem; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 6px;">
+                                        <i class="fa-solid fa-users" style="color: var(--primary-light);"></i> 客服同仁證照完訓進度總覽
+                                    </h5>
+                                    <div class="table-wrapper" style="border: 1px solid var(--border-color); border-radius: 8px; overflow-y: auto; flex: 1;">
+                                        <table class="schedule-table" style="font-size: 11px;">
+                                            <thead>
+                                                <tr>
+                                                    <th>姓名</th>
+                                                    <th>到期月份</th>
+                                                    <th>未修/需修課程</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="training-progress-body">
+                                                <tr>
+                                                    <td colspan="3" style="text-align: center; color: var(--text-muted); padding: 40px 0;">請先上載「上課提醒」檔案</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+
+                                <!-- Right side: Planning by months -->
+                                <div class="training-plan-card" style="flex: 1; display: flex; flex-direction: column; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 16px; min-height: 0;">
+                                    <h5 style="margin: 0 0 12px 0; font-size: 0.95rem; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 6px;">
+                                        <i class="fa-solid fa-calendar-check" style="color: var(--primary-light);"></i> 後續月份課程規劃表 (前 3 個月完成)
+                                    </h5>
+                                    <!-- Monthly plan carousel or scrollable container -->
+                                    <div id="training-months-container" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; padding-right: 4px;">
+                                        <div style="text-align: center; color: var(--text-muted); padding: 80px 0;">
+                                            <i class="fa-solid fa-graduation-cap" style="font-size: 3rem; margin-bottom: 12px; color: var(--border-color);"></i>
+                                            <p>請上載上課提醒資料以產生自動化月度規劃</p>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -458,7 +540,13 @@
         </div>
     </div>
 
+    <!-- Watermark -->
+    <div class="watermark">
+        <i class="fa-solid fa-signature"></i>
+        <span>Ray Feng</span>
+    </div>
+
     <!-- Custom JS -->
-    <script src="static/js/main.js?v=202606301321"></script>
+    <script src="static/js/main.js?v=202607131640"></script>
 </body>
 </html>

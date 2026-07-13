@@ -95,8 +95,24 @@ document.addEventListener("DOMContentLoaded", () => {
     const modalCurrentTime = document.getElementById("modal-current-time");
     const altSlotsList = document.getElementById("alternative-slots-list");
 
+    // Training / License Planner DOM Elements
+    const trainingUploadZone = document.getElementById("training-upload-zone");
+    const trainingFileInput = document.getElementById("training-file-input");
+    const trainingFileNameText = document.getElementById("training-file-name-text");
+    const trainingFileStatus = document.getElementById("training-file-status");
+    const trainingProgressBody = document.getElementById("training-progress-body");
+    const trainingMonthsContainer = document.getElementById("training-months-container");
+    const courseTypeSelect = document.getElementById("course-type-select");
+    const durationRadios = document.getElementsByName("course-duration");
+
+    let trainingData = JSON.parse(localStorage.getItem("training_data")) || null;
+    let reminderFileDate = localStorage.getItem("training_file_date") || null;
+
     // Initialize application data in upload-only mode
     initUploadOnlyMode();
+
+    // Render training tab on load if we have data
+    renderTrainingTab();
 
     // Event Listeners - Checkbox select controls
     selectAllBtn.addEventListener("click", () => toggleAllCheckboxes(true));
@@ -142,6 +158,72 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
+    // Training upload interactions
+    if (trainingUploadZone) {
+        trainingUploadZone.addEventListener("click", () => trainingFileInput.click());
+    }
+    
+    if (trainingFileInput) {
+        trainingFileInput.addEventListener("change", (e) => {
+            if (trainingFileInput.files.length > 0) {
+                handleTrainingFileUpload(trainingFileInput.files[0]);
+            }
+        });
+    }
+
+    if (trainingUploadZone) {
+        ["dragenter", "dragover"].forEach(eventName => {
+            trainingUploadZone.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                trainingUploadZone.classList.add("dragover");
+            }, false);
+        });
+
+        ["dragleave", "drop"].forEach(eventName => {
+            trainingUploadZone.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                trainingUploadZone.classList.remove("dragover");
+            }, false);
+        });
+
+        trainingUploadZone.addEventListener("drop", (e) => {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            if (files.length > 0) {
+                handleTrainingFileUpload(files[0]);
+            }
+        });
+    }
+
+    // Sidebar Course Item dropdown change listener
+    if (courseTypeSelect) {
+        courseTypeSelect.addEventListener("change", () => {
+            const val = courseTypeSelect.value;
+            if (val === "公司內訓" || val === "保發中心" || val === "公平待客") {
+                durationRadios.forEach(r => {
+                    if (r.value === "1") {
+                        r.checked = true;
+                        // trigger click to update tile styles
+                        r.dispatchEvent(new Event('change'));
+                    }
+                    r.disabled = true;
+                });
+            } else if (val === "高齡課程" || val === "洗防課程") {
+                durationRadios.forEach(r => {
+                    if (r.value === "2") {
+                        r.checked = true;
+                        r.dispatchEvent(new Event('change'));
+                    }
+                    r.disabled = true;
+                });
+            } else {
+                durationRadios.forEach(r => {
+                    r.disabled = false;
+                });
+            }
+        });
+    }
+
     const SHIFTS_ALL = [
         "Alex Chen", "Amber Wang", "Evan Liu", "Howard Chen", 
         "Jacky Lee", "Jian Kai Ding", "Molly Song", "Rex Liao", "Sherry Lin"
@@ -149,18 +231,39 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const AGENT_MAP = {
         "alex chen": "Alex Chen",
+        "陳俊廷": "Alex Chen",
+        "alex.chen": "Alex Chen",
         "amber wang": "Amber Wang",
+        "王惠香": "Amber Wang",
+        "amber.wang": "Amber Wang",
         "evan liu": "Evan Liu",
+        "劉柏緯": "Evan Liu",
+        "evan.liu": "Evan Liu",
         "howard chen": "Howard Chen",
+        "陳哲浩": "Howard Chen",
+        "howard.chen": "Howard Chen",
         "jacky lee": "Jacky Lee",
+        "李宗遠": "Jacky Lee",
+        "jacky.lee": "Jacky Lee",
         "jian kai ding": "Jian Kai Ding",
+        "丁建凱": "Jian Kai Ding",
         "kai din": "Jian Kai Ding",
         "jiankai.ding": "Jian Kai Ding",
         "kai ding": "Jian Kai Ding",
         "molly song": "Molly Song",
+        "宋芷婷": "Molly Song",
+        "molly.song": "Molly Song",
         "rex liao": "Rex Liao",
+        "廖哲麟": "Rex Liao",
+        "rex.liao": "Rex Liao",
         "rex laio": "Rex Liao",
-        "sherry lin": "Sherry Lin"
+        "sherry lin": "Sherry Lin",
+        "林舒婷": "Sherry Lin",
+        "sherry.lin": "Sherry Lin",
+        "will tsai": "Will Tsai",
+        "蔡聆偉": "Will Tsai",
+        "ray feng": "Ray Feng",
+        "馮冠瑋": "Ray Feng"
     };
 
     function normalizeName(rawName) {
@@ -461,7 +564,11 @@ document.addEventListener("DOMContentLoaded", () => {
                 panel.classList.add("hidden");
             });
 
-            if (targetTab === "archive-tab") {
+            if (targetTab === "training-tab") {
+                document.getElementById("training-tab").classList.remove("hidden");
+                emptyState.classList.add("hidden");
+                renderTrainingTab();
+            } else if (targetTab === "archive-tab") {
                 document.getElementById("archive-tab").classList.remove("hidden");
                 emptyState.classList.add("hidden");
                 renderArchiveTable();
@@ -1076,7 +1183,7 @@ document.addEventListener("DOMContentLoaded", () => {
                         <span class="course-time">${String(c.start_hour).padStart(2, "0")}:00 - ${String(c.end_hour).padStart(2, "0")}:00 <i class="fa-solid fa-pen-to-square" style="color: var(--primary); margin-left: 6px; font-size: 0.85rem;" title="按此調整時段"></i></span>
                     </div>
                     <div class="course-item-body">
-                        <span>時長: ${c.duration}小時</span>
+                        <span>項目: ${c.course || "其他會議"} | 時長: ${c.duration}小時</span>
                         <span class="coverage-status-tag ${c.violated ? 'warn' : 'ok'}">
                             ${c.violated ? '<i class="fa-solid fa-triangle-exclamation"></i> ' : ''}在線: ${minCoverage}位
                         </span>
@@ -1360,7 +1467,7 @@ document.addEventListener("DOMContentLoaded", () => {
         });
 
         if (courses.length === 0) {
-            scheduleTableBody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted);">無排課記錄</td></tr>`;
+            scheduleTableBody.innerHTML = `<tr><td colspan="9" style="text-align: center; color: var(--text-muted);">無排課記錄</td></tr>`;
         } else {
             courses.forEach(c => {
                 const tr = document.createElement("tr");
@@ -1370,6 +1477,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 tr.innerHTML = `
                     <td class="strong">${c.date}</td>
                     <td class="strong">${c.agent}</td>
+                    <td><span class="badge" style="background: rgba(255, 255, 255, 0.05); color: #fff; padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border-color); font-size: 0.8rem; font-weight: 500;">${c.course || "其他會議"}</span></td>
                     <td>${String(c.start_hour).padStart(2, "0")}:00 - ${String(c.end_hour).padStart(2, "0")}:00</td>
                     <td>${c.duration} 小時</td>
                     <td><span class="badge" style="background: rgba(13, 148, 136, 0.15); color: var(--primary); border: 1px solid rgba(13, 148, 136, 0.3); padding: 4px 8px; border-radius: 4px; font-weight: 600;">${mealStr}</span></td>
@@ -1441,6 +1549,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Core greedy scheduling algorithm in Javascript
     function calculateScheduleJS(selectedMonth, selectedAgents, courseCount, courseDuration, minCoverage, jointClass, existingResult = null) {
+        const courseTypeSelect = document.getElementById("course-type-select");
+        const courseType = courseTypeSelect ? courseTypeSelect.value : "其他會議";
         const dates = initData.dates;
         const agentsData = initData.agents;
         
@@ -1756,7 +1866,8 @@ document.addEventListener("DOMContentLoaded", () => {
                             total_online_at_hours: totalOnlineAtHours,
                             violated: minRemaining < minCoverage,
                             course_number: cNumForAgent,
-                            meal_hour: m_new
+                            meal_hour: m_new,
+                            course: courseType
                         });
                         
                         const m_old = dailyMealHours[dStr][name];
@@ -1934,7 +2045,8 @@ document.addEventListener("DOMContentLoaded", () => {
                         total_online_at_hours: candidateHours.map(h => availableAgents[dStr][h].size),
                         violated: minRemaining < minCoverage,
                         course_number: cNumForAgent,
-                        meal_hour: m_new
+                        meal_hour: m_new,
+                        course: courseType
                     });
                     
                     const m_old = dailyMealHours[dStr][name];
@@ -2016,7 +2128,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         // CSV Header
         let csvContent = "\ufeff"; // BOM for excel utf-8 support
-        csvContent += "日期,客服人員,上課時段,時長(小時),當日用餐時間,最低在線客服數,狀態\n";
+        csvContent += "日期,客服人員,課程項目,上課時段,時長(小時),當日用餐時間,最低在線客服數,狀態\n";
 
         courses.forEach(c => {
             const minCoverage = Math.min(...c.coverage_at_hours);
@@ -2024,7 +2136,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const timeStr = `${String(c.start_hour).padStart(2, "0")}:00-${String(c.end_hour).padStart(2, "0")}:00`;
             const mealStr = c.meal_hour !== undefined ? `${String(c.meal_hour).padStart(2, "0")}:00` : "無";
             
-            csvContent += `"${c.date}","${c.agent}","${timeStr}",${c.duration},"${mealStr}",${minCoverage},"${statusText}"\n`;
+            csvContent += `"${c.date}","${c.agent}","${c.course || "其他會議"}","${timeStr}",${c.duration},"${mealStr}",${minCoverage},"${statusText}"\n`;
         });
 
         // Trigger Download
@@ -2342,7 +2454,8 @@ document.addEventListener("DOMContentLoaded", () => {
             }),
             violated: newSlot.violated,
             course_number: oldCourse.course_number,
-            meal_hour: newSlot.mealHour
+            meal_hour: newSlot.mealHour,
+            course: oldCourse.course || "其他會議"
         };
         cList.push(newCourse);
         cList.sort((a, b) => a.course_number - b.course_number);
@@ -2398,7 +2511,7 @@ document.addEventListener("DOMContentLoaded", () => {
     function renderArchiveTable() {
         archiveTableBody.innerHTML = "";
         if (savedSchedules.length === 0) {
-            archiveTableBody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">無排程存檔紀錄</td></tr>`;
+            archiveTableBody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted);">無排程存檔紀錄</td></tr>`;
             archiveWarningContainer.classList.add("hidden");
             archiveWarningList.innerHTML = "";
             return;
@@ -2563,10 +2676,24 @@ document.addEventListener("DOMContentLoaded", () => {
             
             const statusHTML = statusBadges.join(" ");
 
+            const courseSelectHTML = `
+                <div class="select-wrapper" style="min-width: 120px;">
+                    <select class="archive-course-select" data-index="${index}" style="padding: 4px 8px; font-size: 0.8rem; height: auto; background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); border-radius: 4px; color: #fff; width: 100%; cursor: pointer;">
+                        <option value="公司內訓" ${item.course === "公司內訓" ? "selected" : ""}>公司內訓</option>
+                        <option value="保發中心" ${item.course === "保發中心" ? "selected" : ""}>保發中心</option>
+                        <option value="高齡課程" ${item.course === "高齡課程" ? "selected" : ""}>高齡課程</option>
+                        <option value="洗防課程" ${item.course === "洗防課程" ? "selected" : ""}>洗防課程</option>
+                        <option value="公平待客" ${item.course === "公平待客" ? "selected" : ""}>公平待客</option>
+                        <option value="其他會議" ${(!item.course || item.course === "其他會議" || (item.course !== "公司內訓" && item.course !== "保發中心" && item.course !== "高齡課程" && item.course !== "洗防課程" && item.course !== "公平待客")) ? "selected" : ""}>其他會議</option>
+                    </select>
+                </div>
+            `;
+
             const tr = document.createElement("tr");
             tr.innerHTML = `
                 <td class="strong">${item.name}</td>
                 <td>${item.date}</td>
+                <td>${courseSelectHTML}</td>
                 <td>${item.time}</td>
                 <td>${item.duration} 小時</td>
                 <td>${statusHTML}</td>
@@ -2575,6 +2702,37 @@ document.addEventListener("DOMContentLoaded", () => {
                     <button class="delete-archive-btn" style="padding: 4px 8px; font-size: 0.8rem; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); color: #f87171; border-radius: 4px; font-weight: 500; cursor: pointer;"><i class="fa-solid fa-trash-can"></i> 刪除</button>
                 </td>
             `;
+
+            const courseSelectEl = tr.querySelector(".archive-course-select");
+            if (courseSelectEl) {
+                courseSelectEl.addEventListener("change", (e) => {
+                    const newCourse = e.target.value;
+                    pushArchiveHistory();
+                    
+                    item.course = newCourse;
+                    
+                    if (newCourse === "公司內訓" || newCourse === "保發中心" || newCourse === "公平待客") {
+                        item.duration = 1;
+                    } else if (newCourse === "高齡課程" || newCourse === "洗防課程") {
+                        item.duration = 2;
+                    }
+                    
+                    const parsedTime = item.time.split(" - ");
+                    const startHour = parseInt(parsedTime[0].split(":")[0], 10);
+                    const endHour = (startHour + item.duration) % 24;
+                    item.time = `${String(startHour).padStart(2, "0")}:00 - ${String(endHour).padStart(2, "0")}:00`;
+                    
+                    autoSaveArchive();
+                    renderArchiveTable();
+                    renderCalendar(uploadedMonthCode);
+                    renderHeatmap();
+                    const minCoverage = parseInt(document.getElementById("coverage-select").value, 10) || 0;
+                    renderStats(minCoverage);
+                    if (trainingData) {
+                        renderTrainingTab();
+                    }
+                });
+            }
             
             const editBtn = tr.querySelector(".edit-archive-btn");
             editBtn.addEventListener("click", (e) => {
@@ -2624,6 +2782,10 @@ document.addEventListener("DOMContentLoaded", () => {
             renderHeatmap();
             const minCoverage = parseInt(document.getElementById("coverage-select").value, 10) || 0;
             renderStats(minCoverage);
+        }
+        
+        if (trainingData) {
+            renderTrainingTab();
         }
     }
 
@@ -2710,6 +2872,406 @@ document.addEventListener("DOMContentLoaded", () => {
             showUploadStatus("已清空存檔，並將變減儲存至瀏覽器。", "success");
         }
     });
+
+    // Training Planner File Upload Handler
+    function handleTrainingFileUpload(file) {
+        if (!file.name.endsWith(".xlsx")) {
+            alert("僅支援 .xlsx 格式的 Excel 檔案！");
+            return;
+        }
+        
+        let fileDate = null;
+        const match = file.name.match(/(\d{4})(\d{2})(\d{2})/);
+        if (match) {
+            fileDate = `${match[1]}-${match[2]}-${match[3]}`;
+        } else {
+            const today = new Date();
+            fileDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-01`;
+        }
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: "array" });
+                
+                const sheet1Name = workbook.SheetNames.find(n => n.includes("內訓") && n.includes("保發"));
+                const sheet2Name = workbook.SheetNames.find(n => n.includes("高齡") && n.includes("洗防"));
+                
+                if (!sheet1Name || !sheet2Name) {
+                    alert("Excel 檔案工作表名稱不符合預期（必須包含『內訓+保發』與『高齡+洗防』相關工作表）！");
+                    return;
+                }
+                
+                const sheet1 = XLSX.utils.sheet_to_json(workbook.Sheets[sheet1Name]);
+                const sheet2 = XLSX.utils.sheet_to_json(workbook.Sheets[sheet2Name]);
+                
+                const parsedAgents = {};
+                
+                sheet1.forEach(row => {
+                    const rawName = row["姓名"];
+                    if (!rawName) return;
+                    const name = normalizeName(rawName);
+                    if (!name) return;
+                    
+                    const internalRemaining = parseInt(row["公司內訓-剩餘堂數"], 10) || 0;
+                    const insuranceRemaining = parseInt(row["保發中心-剩餘堂數"], 10) || 0;
+                    const expiry = row["訓練到期日"] ? row["訓練到期日"].toString().split(" ")[0] : "";
+                    
+                    parsedAgents[name] = {
+                        name: name,
+                        expiry: expiry,
+                        internalRemaining: internalRemaining,
+                        insuranceRemaining: insuranceRemaining,
+                        seniorCompleted: true,
+                        amlCompleted: true,
+                        fairCompleted: true
+                    };
+                });
+                
+                sheet2.forEach(row => {
+                    const rawName = row["姓名"];
+                    if (!rawName) return;
+                    const name = normalizeName(rawName);
+                    if (!name) return;
+                    
+                    const seniorStatus = row["高齡-完成情況"] || row["高齡-完成狀態"] || "";
+                    const amlStatus = row["洗防課程-完成狀態"] || "";
+                    const fairStatus = row["公平待客-完成狀態"] || "";
+                    
+                    if (parsedAgents[name]) {
+                        parsedAgents[name].seniorCompleted = (seniorStatus.trim() === "已完成");
+                        parsedAgents[name].amlCompleted = (amlStatus.trim() === "已完成");
+                        parsedAgents[name].fairCompleted = (fairStatus.trim() === "已完成");
+                    }
+                });
+                
+                const trainingList = Object.values(parsedAgents);
+                if (trainingList.length === 0) {
+                    alert("Excel 檔案中找不到符合的客服同仁資料！");
+                    return;
+                }
+                
+                trainingData = trainingList;
+                reminderFileDate = fileDate;
+                
+                localStorage.setItem("training_data", JSON.stringify(trainingData));
+                localStorage.setItem("training_file_date", reminderFileDate);
+                
+                renderTrainingTab();
+                alert("上課提醒 Excel 載入成功！");
+                
+            } catch (err) {
+                console.error("Error parsing training excel:", err);
+                alert("解析上課提醒 Excel 失敗：" + err.message);
+            }
+        };
+        reader.readAsArrayBuffer(file);
+    }
+
+    // Render Training Audit & Planning Tab
+    function renderTrainingTab() {
+        if (!trainingData || !reminderFileDate) {
+            if (trainingFileStatus) {
+                trainingFileStatus.innerHTML = `
+                    <i class="fa-solid fa-circle-info" style="color: var(--text-muted);"></i>
+                    <span>尚未上傳上課提醒資料</span>
+                `;
+            }
+            return;
+        }
+
+        if (trainingFileStatus) {
+            trainingFileStatus.innerHTML = `
+                <i class="fa-solid fa-circle-check" style="color: var(--primary-light);"></i>
+                <span>已載入：${reminderFileDate} 版本</span>
+            `;
+        }
+        if (trainingFileNameText) {
+            trainingFileNameText.innerHTML = `<i class="fa-solid fa-file-excel" style="color: var(--primary-light); margin-right: 6px;"></i>已成功載入上課提醒檔案 (基準日: ${reminderFileDate})`;
+        }
+
+        let maxLimitStr = reminderFileDate.substring(0, 7);
+        
+        function subtractMonths(dateStr, mCount) {
+            let [y, m] = dateStr.substring(0, 7).split("-").map(Number);
+            m -= mCount;
+            while (m <= 0) {
+                m += 12;
+                y -= 1;
+            }
+            return `${y}-${String(m).padStart(2, "0")}`;
+        }
+        
+        function compareMonths(m1, m2) {
+            return m1.localeCompare(m2);
+        }
+
+        const startMonthStr = reminderFileDate.substring(0, 7);
+        
+        trainingData.forEach(agent => {
+            if ((agent.internalRemaining > 0 || agent.insuranceRemaining > 0) && agent.expiry) {
+                const limit = subtractMonths(agent.expiry, 3);
+                if (compareMonths(limit, maxLimitStr) > 0) {
+                    maxLimitStr = limit;
+                }
+            }
+            if (!agent.seniorCompleted || !agent.amlCompleted || !agent.fairCompleted) {
+                const limit = "2026-09";
+                if (compareMonths(limit, maxLimitStr) > 0) {
+                    maxLimitStr = limit;
+                }
+            }
+        });
+
+        const monthList = [];
+        let [sY, sM] = startMonthStr.split("-").map(Number);
+        let [eY, eM] = maxLimitStr.split("-").map(Number);
+        let currY = sY;
+        let currM = sM;
+        while (currY < eY || (currY === eY && currM <= eM)) {
+            monthList.push(`${currY}-${String(currM).padStart(2, "0")}`);
+            currM++;
+            if (currM > 12) {
+                currM = 1;
+                currY++;
+            }
+        }
+        
+        if (monthList.length === 0) {
+            monthList.push(startMonthStr);
+        }
+
+        const monthlyPlans = {};
+        monthList.forEach(m => {
+            monthlyPlans[m] = {};
+            SHIFTS_ALL.forEach(name => {
+                monthlyPlans[m][name] = {};
+            });
+        });
+
+        const agentRequiredList = [];
+
+        trainingData.forEach(agent => {
+            const name = agent.name;
+            const coursesNeeded = [];
+            let totalNeeded = 0;
+            
+            if (agent.internalRemaining > 0) {
+                coursesNeeded.push({ course: "公司內訓", count: agent.internalRemaining, expiry: agent.expiry, limit: subtractMonths(agent.expiry, 3) });
+                totalNeeded += agent.internalRemaining;
+            }
+            if (agent.insuranceRemaining > 0) {
+                coursesNeeded.push({ course: "保發中心", count: agent.insuranceRemaining, expiry: agent.expiry, limit: subtractMonths(agent.expiry, 3) });
+                totalNeeded += agent.insuranceRemaining;
+            }
+            if (!agent.seniorCompleted) {
+                coursesNeeded.push({ course: "高齡課程", count: 1, expiry: "2026-12-31", limit: "2026-09" });
+                totalNeeded += 1;
+            }
+            if (!agent.amlCompleted) {
+                coursesNeeded.push({ course: "洗防課程", count: 1, expiry: "2026-12-31", limit: "2026-09" });
+                totalNeeded += 1;
+            }
+            if (!agent.fairCompleted) {
+                coursesNeeded.push({ course: "公平待客", count: 1, expiry: "2026-12-31", limit: "2026-09" });
+                totalNeeded += 1;
+            }
+
+            coursesNeeded.forEach(cReq => {
+                const limitMonth = cReq.limit;
+                const availMonths = [];
+                let [sY, sM] = startMonthStr.split("-").map(Number);
+                let [lY, lM] = limitMonth.split("-").map(Number);
+                
+                let cy = sY, cm = sM;
+                while (cy < lY || (cy === lY && cm <= lM)) {
+                    availMonths.push(`${cy}-${String(cm).padStart(2, "0")}`);
+                    cm++;
+                    if (cm > 12) {
+                        cm = 1;
+                        cy++;
+                    }
+                }
+                
+                if (availMonths.length === 0) {
+                    availMonths.push(startMonthStr);
+                }
+
+                const baseCount = Math.floor(cReq.count / availMonths.length);
+                const remainder = cReq.count % availMonths.length;
+                
+                availMonths.forEach((m, idx) => {
+                    if (monthlyPlans[m] && monthlyPlans[m][name]) {
+                        const planned = baseCount + (idx < remainder ? 1 : 0);
+                        if (planned > 0) {
+                            monthlyPlans[m][name][cReq.course] = planned;
+                        }
+                    }
+                });
+            });
+
+            let totalArranged = 0;
+            savedSchedules.forEach(item => {
+                if (item.name !== name) return;
+                if (["公司內訓", "保發中心", "高齡課程", "洗防課程", "公平待客"].includes(item.course)) {
+                    totalArranged++;
+                }
+            });
+
+            agentRequiredList.push({
+                name: name,
+                expiry: agent.expiry || "2026-12-31",
+                coursesNeeded: coursesNeeded,
+                totalNeeded: totalNeeded,
+                totalArranged: totalArranged
+            });
+        });
+
+        if (trainingProgressBody) {
+            trainingProgressBody.innerHTML = "";
+            agentRequiredList.forEach(agent => {
+                const tr = document.createElement("tr");
+                const progressPct = agent.totalNeeded > 0 ? Math.min(100, Math.round((agent.totalArranged / agent.totalNeeded) * 100)) : 100;
+                
+                let statusBadge = "";
+                if (agent.totalNeeded === 0) {
+                    statusBadge = `<span class="training-progress-badge none">無需修課</span>`;
+                } else if (agent.totalArranged >= agent.totalNeeded) {
+                    statusBadge = `<span class="training-progress-badge completed"><i class="fa-solid fa-circle-check"></i> 已排完</span>`;
+                } else {
+                    statusBadge = `<span class="training-progress-badge pending">尚缺 ${agent.totalNeeded - agent.totalArranged} 堂</span>`;
+                }
+
+                let coursesHTML = "";
+                if (agent.coursesNeeded.length === 0) {
+                    coursesHTML = `<span style="color: var(--text-muted);">無未完訓項目</span>`;
+                } else {
+                    coursesHTML = agent.coursesNeeded.map(c => `
+                        <div style="margin-bottom: 4px;">
+                            <strong>${c.course}</strong>: 需修 ${c.count} 堂 (截止: ${c.limit})
+                        </div>
+                    `).join("");
+                }
+
+                tr.innerHTML = `
+                    <td class="strong" style="vertical-align: top;">${agent.name}</td>
+                    <td style="vertical-align: top; color: var(--text-secondary);">${agent.expiry}</td>
+                    <td style="vertical-align: top;">
+                        <div style="margin-bottom: 6px;">${coursesHTML}</div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <div class="progress-mini-track" style="flex: 1;">
+                                <div class="progress-mini-bar" style="width: ${progressPct}%;"></div>
+                            </div>
+                            <span style="font-size: 10px; color: var(--text-secondary); min-width: 28px; text-align: right;">${progressPct}%</span>
+                            ${statusBadge}
+                        </div>
+                    </td>
+                `;
+                trainingProgressBody.appendChild(tr);
+            });
+        }
+
+        if (trainingMonthsContainer) {
+            trainingMonthsContainer.innerHTML = "";
+            
+            monthList.forEach(m => {
+                const card = document.createElement("div");
+                card.className = "month-plan-card";
+                
+                const agentsInMonth = [];
+                let totalMonthPlanned = 0;
+                let totalMonthArranged = 0;
+                
+                SHIFTS_ALL.forEach(name => {
+                    const plans = monthlyPlans[m][name] || {};
+                    const plannedCourses = Object.keys(plans);
+                    if (plannedCourses.length > 0) {
+                        const arranged = {};
+                        savedSchedules.forEach(item => {
+                            if (item.name !== name) return;
+                            const itemMonth = item.date.substring(0, 7);
+                            if (itemMonth === m && plannedCourses.includes(item.course)) {
+                                arranged[item.course] = (arranged[item.course] || 0) + 1;
+                                totalMonthArranged++;
+                            }
+                        });
+                        
+                        let agentAllCompleted = true;
+                        const coursesDetails = plannedCourses.map(cname => {
+                            const plannedCount = plans[cname];
+                            const arrangedCount = arranged[cname] || 0;
+                            totalMonthPlanned += plannedCount;
+                            
+                            const isCompleted = arrangedCount >= plannedCount;
+                            if (!isCompleted) {
+                                agentAllCompleted = false;
+                            }
+                            
+                            return {
+                                name: cname,
+                                planned: plannedCount,
+                                arranged: arrangedCount,
+                                completed: isCompleted
+                            };
+                        });
+                        
+                        agentsInMonth.push({
+                            name: name,
+                            courses: coursesDetails,
+                            completed: agentAllCompleted
+                        });
+                    }
+                });
+                
+                if (agentsInMonth.length === 0) return;
+                
+                const monthParts = m.split("-");
+                const titleStr = `${monthParts[0]}年 ${parseInt(monthParts[1], 10)}月`;
+                const summaryStr = `規劃排定 ${totalMonthPlanned} 堂，已排 ${totalMonthArranged} 堂`;
+                
+                let headerStatusBadge = "";
+                if (totalMonthArranged >= totalMonthPlanned) {
+                    headerStatusBadge = `<span class="training-progress-badge completed" style="font-size: 11px;"><i class="fa-solid fa-circle-check"></i> 本月規劃已排滿</span>`;
+                } else {
+                    headerStatusBadge = `<span class="training-progress-badge pending" style="font-size: 11px;">本月尚缺 ${totalMonthPlanned - totalMonthArranged} 堂</span>`;
+                }
+
+                let agentsHTML = agentsInMonth.map(agent => {
+                    const coursesTagsHTML = agent.courses.map(c => {
+                        const classStyle = c.completed ? 'completed' : 'pending';
+                        const text = c.completed 
+                            ? `${c.name} (${c.arranged}/${c.planned}堂)` 
+                            : `${c.name} (尚缺 ${c.planned - c.arranged} 堂，已排 ${c.arranged}/${c.planned})`;
+                        return `<span class="plan-course-tag ${classStyle}"><i class="fa-solid ${c.completed ? 'fa-circle-check' : 'fa-circle-dot'}"></i> ${text}</span>`;
+                    }).join(" ");
+                    
+                    return `
+                        <div class="month-plan-agent-row">
+                            <strong style="width: 80px; color: #fff;">${agent.name}</strong>
+                            <div class="month-plan-courses-list" style="flex: 1; margin-left: 10px;">
+                                ${coursesTagsHTML}
+                            </div>
+                        </div>
+                    `;
+                }).join("");
+
+                card.innerHTML = `
+                    <div class="month-plan-header">
+                        <div>
+                            <span class="month-plan-title"><i class="fa-solid fa-calendar-days" style="margin-right: 6px;"></i>${titleStr}</span>
+                            <span class="month-plan-summary" style="margin-left: 12px; color: var(--text-muted);">${summaryStr}</span>
+                        </div>
+                        ${headerStatusBadge}
+                    </div>
+                    <div class="month-plan-body">
+                        ${agentsHTML}
+                    </div>
+                `;
+                trainingMonthsContainer.appendChild(card);
+            });
+        }
+    }
 
     // Initial render
     renderArchiveTable();

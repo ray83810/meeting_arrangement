@@ -1908,3 +1908,157 @@ select:focus {
     border-color: rgba(255, 255, 255, 0.1);
 }
 
+/* Watermark Style */
+.watermark {
+    position: fixed;
+    bottom: 16px;
+    right: 16px;
+    font-size: 13px;
+    font-family: var(--font-family);
+    color: var(--text-muted);
+    opacity: 0.55;
+    z-index: 9999;
+    pointer-events: none;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(17, 24, 39, 0.6);
+    padding: 6px 12px;
+    border-radius: 20px;
+    backdrop-filter: blur(4px);
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-sm);
+    transition: all 0.3s ease;
+}
+
+/* TAB 5: License Training Planner Styles */
+.training-upload-dropzone.dragover {
+    border-color: var(--primary-light) !important;
+    background: rgba(13, 148, 136, 0.08) !important;
+    color: #fff !important;
+}
+
+.training-progress-badge {
+    display: inline-block;
+    padding: 3px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+}
+
+.training-progress-badge.completed {
+    background: rgba(16, 185, 129, 0.15);
+    color: #34d399;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.training-progress-badge.pending {
+    background: rgba(245, 158, 11, 0.15);
+    color: #fbbf24;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.training-progress-badge.none {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-muted);
+    border: 1px solid var(--border-color);
+}
+
+/* Month Plan Card Design */
+.month-plan-card {
+    background: rgba(255, 255, 255, 0.015);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 14px 16px;
+    transition: all 0.2s ease;
+    margin-bottom: 12px;
+}
+
+.month-plan-card:hover {
+    border-color: rgba(13, 148, 136, 0.3);
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.month-plan-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    padding-bottom: 8px;
+    margin-bottom: 10px;
+}
+
+.month-plan-title {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--primary-light);
+}
+
+.month-plan-summary {
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
+.month-plan-agent-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 8px;
+    border-radius: 4px;
+    margin-bottom: 4px;
+    background: rgba(0, 0, 0, 0.1);
+    font-size: 12px;
+}
+
+.month-plan-agent-row:hover {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.month-plan-courses-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.plan-course-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border-color);
+}
+
+.plan-course-tag.completed {
+    background: rgba(16, 185, 129, 0.1);
+    border-color: rgba(16, 185, 129, 0.25);
+    color: #34d399;
+}
+
+.plan-course-tag.pending {
+    background: rgba(245, 158, 11, 0.1);
+    border-color: rgba(245, 158, 11, 0.25);
+    color: #fbbf24;
+}
+
+/* Micro progress bar */
+.progress-mini-track {
+    height: 4px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 2px;
+    overflow: hidden;
+    width: 60px;
+    margin-top: 4px;
+}
+
+.progress-mini-bar {
+    height: 100%;
+    background: var(--primary-light);
+    border-radius: 2px;
+    transition: width 0.3s ease;
+}
+
+
