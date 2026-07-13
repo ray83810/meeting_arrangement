@@ -1196,7 +1196,7 @@ document.addEventListener("DOMContentLoaded", () => {
                         <span class="course-time">${String(c.start_hour).padStart(2, "0")}:00 - ${String(c.end_hour).padStart(2, "0")}:00 <i class="fa-solid fa-pen-to-square" style="color: var(--primary); margin-left: 6px; font-size: 0.85rem;" title="按此調整時段"></i></span>
                     </div>
                     <div class="course-item-body">
-                        <span>項目: ${c.course || "其他會議"} | 時長: ${c.duration}小時</span>
+                        <span>項目: ${c.course || "一般會議"} | 時長: ${c.duration}小時</span>
                         <span class="coverage-status-tag ${c.violated ? 'warn' : 'ok'}">
                             ${c.violated ? '<i class="fa-solid fa-triangle-exclamation"></i> ' : ''}在線: ${minCoverage}位
                         </span>
@@ -1490,7 +1490,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 tr.innerHTML = `
                     <td class="strong">${c.date}</td>
                     <td class="strong">${c.agent}</td>
-                    <td><span class="badge" style="background: rgba(255, 255, 255, 0.05); color: #fff; padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border-color); font-size: 0.8rem; font-weight: 500;">${c.course || "其他會議"}</span></td>
+                    <td><span class="badge" style="background: rgba(255, 255, 255, 0.05); color: #fff; padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border-color); font-size: 0.8rem; font-weight: 500;">${c.course || "一般會議"}</span></td>
                     <td>${String(c.start_hour).padStart(2, "0")}:00 - ${String(c.end_hour).padStart(2, "0")}:00</td>
                     <td>${c.duration} 小時</td>
                     <td><span class="badge" style="background: rgba(13, 148, 136, 0.15); color: var(--primary); border: 1px solid rgba(13, 148, 136, 0.3); padding: 4px 8px; border-radius: 4px; font-weight: 600;">${mealStr}</span></td>
@@ -1563,7 +1563,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Core greedy scheduling algorithm in Javascript
     function calculateScheduleJS(selectedMonth, selectedAgents, courseCount, courseDuration, minCoverage, jointClass, existingResult = null) {
         const courseTypeSelect = document.getElementById("course-type-select");
-        const courseType = courseTypeSelect ? courseTypeSelect.value : "其他會議";
+        const courseType = courseTypeSelect ? courseTypeSelect.value : "一般會議";
         const dates = initData.dates;
         const agentsData = initData.agents;
         
@@ -2149,7 +2149,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const timeStr = `${String(c.start_hour).padStart(2, "0")}:00-${String(c.end_hour).padStart(2, "0")}:00`;
             const mealStr = c.meal_hour !== undefined ? `${String(c.meal_hour).padStart(2, "0")}:00` : "無";
             
-            csvContent += `"${c.date}","${c.agent}","${c.course || "其他會議"}","${timeStr}",${c.duration},"${mealStr}",${minCoverage},"${statusText}"\n`;
+            csvContent += `"${c.date}","${c.agent}","${c.course || "一般會議"}","${timeStr}",${c.duration},"${mealStr}",${minCoverage},"${statusText}"\n`;
         });
 
         // Trigger Download
@@ -2470,7 +2470,7 @@ document.addEventListener("DOMContentLoaded", () => {
             violated: newSlot.violated,
             course_number: oldCourse.course_number,
             meal_hour: newSlot.mealHour,
-            course: oldCourse.course || "其他會議"
+            course: oldCourse.course || "一般會議"
         };
         cList.push(newCourse);
         cList.sort((a, b) => a.course_number - b.course_number);
@@ -2699,7 +2699,7 @@ document.addEventListener("DOMContentLoaded", () => {
                         <option value="高齡課程" ${item.course === "高齡課程" ? "selected" : ""}>高齡課程</option>
                         <option value="洗防課程" ${item.course === "洗防課程" ? "selected" : ""}>洗防課程</option>
                         <option value="公平待客" ${item.course === "公平待客" ? "selected" : ""}>公平待客</option>
-                        <option value="其他會議" ${(!item.course || item.course === "其他會議" || (item.course !== "公司內訓" && item.course !== "保發中心" && item.course !== "高齡課程" && item.course !== "洗防課程" && item.course !== "公平待客")) ? "selected" : ""}>其他會議</option>
+                        <option value="一般會議" ${(!item.course || item.course === "一般會議" || (item.course !== "公司內訓" && item.course !== "保發中心" && item.course !== "高齡課程" && item.course !== "洗防課程" && item.course !== "公平待客")) ? "selected" : ""}>一般會議</option>
                     </select>
                 </div>
             `;
@@ -3317,9 +3317,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // Fullscreen Expansion Listeners for Training Planner Tab
-    const expandProgressBtn = document.getElementById("expand-progress-btn");
     const expandPlanBtn = document.getElementById("expand-plan-btn");
-    const progressCard = document.getElementById("training-progress-card");
     const scheduleCard = document.getElementById("training-schedule-card");
 
     function toggleFullscreen(card, btn) {
@@ -3331,31 +3329,17 @@ document.addEventListener("DOMContentLoaded", () => {
         btn.setAttribute("title", isFullscreen ? "縮小檢視" : "放大檢視");
     }
 
-    if (expandProgressBtn && progressCard) {
-        expandProgressBtn.addEventListener("click", (e) => {
-            e.stopPropagation();
-            toggleFullscreen(progressCard, expandProgressBtn);
-            if (scheduleCard && scheduleCard.classList.contains("fullscreen-mode")) {
-                toggleFullscreen(scheduleCard, expandPlanBtn);
-            }
-        });
-    }
-
     if (expandPlanBtn && scheduleCard) {
         expandPlanBtn.addEventListener("click", (e) => {
             e.stopPropagation();
             toggleFullscreen(scheduleCard, expandPlanBtn);
-            if (progressCard && progressCard.classList.contains("fullscreen-mode")) {
-                toggleFullscreen(progressCard, expandProgressBtn);
-            }
         });
     }
 
     document.addEventListener("click", (e) => {
-        const fullscreenCard = document.querySelector(".training-side-card.fullscreen-mode, .training-plan-card.fullscreen-mode");
+        const fullscreenCard = document.querySelector(".training-plan-card.fullscreen-mode");
         if (fullscreenCard && !fullscreenCard.contains(e.target)) {
-            const btn = fullscreenCard.id === "training-progress-card" ? expandProgressBtn : expandPlanBtn;
-            toggleFullscreen(fullscreenCard, btn);
+            toggleFullscreen(fullscreenCard, expandPlanBtn);
         }
     });
 

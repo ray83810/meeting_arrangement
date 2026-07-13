@@ -84,7 +84,7 @@
                             <option value="高齡課程">高齡課程 (2小時)</option>
                             <option value="洗防課程">洗防課程 (2小時)</option>
                             <option value="公平待客">公平待客 (1小時)</option>
-                            <option value="其他會議" selected>其他會議 (自訂時長)</option>
+                            <option value="一般會議" selected>一般會議 (自訂時長)</option>
                         </select>
                     </div>
                 </div>
@@ -464,36 +464,8 @@
 
                             <!-- Flex container for progress and monthly plan split -->
                             <div class="training-main-layout" style="display: flex; gap: 20px; flex: 1; min-height: 0;">
-                                <!-- Left side: Student status list -->
-                                <div class="training-side-card" id="training-progress-card" style="flex: 1; width: 50%; min-width: 0; display: flex; flex-direction: column; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 16px; min-height: 0;">
-                                    <h5 style="margin: 0 0 12px 0; font-size: 0.95rem; font-weight: 700; color: #fff; display: flex; align-items: center; justify-content: space-between;">
-                                        <div style="display: flex; align-items: center; gap: 6px;">
-                                            <i class="fa-solid fa-users" style="color: var(--primary-light);"></i> 客服同仁證照完訓進度總覽
-                                        </div>
-                                        <button class="expand-btn" id="expand-progress-btn" title="放大檢視">
-                                            <i class="fa-solid fa-expand"></i>
-                                        </button>
-                                    </h5>
-                                    <div class="table-wrapper" style="border: 1px solid var(--border-color); border-radius: 8px; overflow-y: auto; flex: 1;">
-                                        <table class="schedule-table" style="font-size: 11px;">
-                                            <thead>
-                                                <tr>
-                                                    <th>姓名</th>
-                                                    <th>到期月份</th>
-                                                    <th>未修/需修課程</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody id="training-progress-body">
-                                                <tr>
-                                                    <td colspan="3" style="text-align: center; color: var(--text-muted); padding: 40px 0;">請先上載「上課提醒」檔案</td>
-                                                </tr>
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-
                                 <!-- Right side: Planning by months -->
-                                <div class="training-plan-card" id="training-schedule-card" style="flex: 1; width: 50%; min-width: 0; display: flex; flex-direction: column; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 16px; min-height: 0;">
+                                <div class="training-plan-card" id="training-schedule-card" style="flex: 1; width: 100%; min-width: 0; display: flex; flex-direction: column; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 16px; min-height: 0;">
                                     <h5 style="margin: 0 0 12px 0; font-size: 0.95rem; font-weight: 700; color: #fff; display: flex; align-items: center; justify-content: space-between;">
                                         <div style="display: flex; align-items: center; gap: 6px;">
                                             <i class="fa-solid fa-calendar-check" style="color: var(--primary-light);"></i> 後續月份課程規劃表 (前 3 個月完成)
