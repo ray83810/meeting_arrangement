@@ -221,18 +221,17 @@ document.addEventListener("DOMContentLoaded", () => {
     if (courseTypeSelect) {
         courseTypeSelect.addEventListener("change", () => {
             const val = courseTypeSelect.value;
-            if (val === "公司內訓" || val === "保發中心" || val === "公平待客") {
+            if (val === "高齡課程") {
                 durationRadios.forEach(r => {
-                    if (r.value === "1") {
+                    if (r.value === "3") {
                         r.checked = true;
-                        // trigger click to update tile styles
                         r.dispatchEvent(new Event('change'));
                     }
                     r.disabled = true;
                 });
-            } else if (val === "高齡課程" || val === "洗防課程") {
+            } else if (val === "公司內訓" || val === "保發中心" || val === "洗防課程" || val === "公平待客") {
                 durationRadios.forEach(r => {
-                    if (r.value === "2") {
+                    if (r.value === "1") {
                         r.checked = true;
                         r.dispatchEvent(new Event('change'));
                     }
@@ -2936,10 +2935,10 @@ document.addEventListener("DOMContentLoaded", () => {
                     
                     item.course = newCourse;
                     
-                    if (newCourse === "公司內訓" || newCourse === "保發中心" || newCourse === "公平待客") {
+                    if (newCourse === "高齡課程") {
+                        item.duration = 3;
+                    } else if (newCourse === "公司內訓" || newCourse === "保發中心" || newCourse === "洗防課程" || newCourse === "公平待客") {
                         item.duration = 1;
-                    } else if (newCourse === "高齡課程" || newCourse === "洗防課程") {
-                        item.duration = 2;
                     }
                     
                     const parsedTime = item.time.split(" - ");
