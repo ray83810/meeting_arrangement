@@ -3700,6 +3700,7 @@ document.addEventListener("DOMContentLoaded", () => {
     } catch (e) {
         console.error("Error inside renderTrainingTab:", e);
     }
+}
 
     // Fullscreen Expansion Listeners for Training Planner Tab
     const expandPlanBtn = document.getElementById("expand-plan-btn");
