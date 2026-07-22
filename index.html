@@ -544,6 +544,43 @@
                 </div>
             </div>
         </div>
+    <!-- Reallocate Month Modal for Training Planner -->
+    <div id="reallocate-month-modal" class="modal-overlay hidden">
+        <div class="modal-container" style="max-width: 440px;">
+            <div class="modal-header">
+                <h3><i class="fa-solid fa-calendar-week"></i> 調整課程規劃月份</h3>
+                <button id="close-reallocate-modal-btn" class="close-btn">&times;</button>
+            </div>
+            <div class="modal-body" style="padding: 20px;">
+                <div class="current-slot-info" style="margin-bottom: 16px;">
+                    <div class="info-item">
+                        <span class="info-label">客服人員:</span>
+                        <span id="reallocate-agent-name" class="info-val">-</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">規劃課程:</span>
+                        <span id="reallocate-course-name" class="info-val">-</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">目前規劃月份:</span>
+                        <span id="reallocate-current-month" class="info-val">-</span>
+                    </div>
+                </div>
+                
+                <div class="form-group" style="margin-top: 16px;">
+                    <label for="reallocate-target-month-select" style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 8px; display: block;">
+                        <i class="fa-solid fa-arrow-right-arrow-left" style="color: var(--primary-light);"></i> 請選擇欲更換至的規劃月份：
+                    </label>
+                    <select id="reallocate-target-month-select" style="width: 100%; padding: 8px 12px; font-size: 0.9rem; background: var(--bg-card); color: #fff; border: 1px solid var(--border-color); border-radius: 6px; color-scheme: dark;">
+                        <!-- Dynamically populated -->
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer" style="padding: 12px 20px; display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid var(--border-color);">
+                <button id="cancel-reallocate-btn" class="secondary-btn" style="padding: 6px 14px; font-size: 0.85rem;">取消</button>
+                <button id="confirm-reallocate-btn" class="primary-btn" style="padding: 6px 14px; font-size: 0.85rem; border-radius: 6px; cursor: pointer;">確認更換月份</button>
+            </div>
+        </div>
     </div>
 
     <!-- Watermark -->

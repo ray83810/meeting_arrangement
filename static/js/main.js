@@ -30,6 +30,15 @@ document.addEventListener("DOMContentLoaded", () => {
     } catch (e) {
         console.error("Error parsing saved_schedules from localStorage:", e);
     }
+    let trainingMonthOverrides = {};
+    try {
+        const storedOverrides = localStorage.getItem("training_month_overrides");
+        if (storedOverrides) {
+            trainingMonthOverrides = JSON.parse(storedOverrides);
+        }
+    } catch (e) {
+        console.error("Error parsing training_month_overrides:", e);
+    }
     let archiveHistory = [];
 
     // DOM Elements
@@ -728,6 +737,27 @@ document.addEventListener("DOMContentLoaded", () => {
             altModal.classList.add("hidden");
         }
     });
+
+    const reallocateModal = document.getElementById("reallocate-month-modal");
+    const closeReallocateModalBtn = document.getElementById("close-reallocate-modal-btn");
+    const cancelReallocateBtn = document.getElementById("cancel-reallocate-btn");
+    if (closeReallocateModalBtn) {
+        closeReallocateModalBtn.addEventListener("click", () => {
+            if (reallocateModal) reallocateModal.classList.add("hidden");
+        });
+    }
+    if (cancelReallocateBtn) {
+        cancelReallocateBtn.addEventListener("click", () => {
+            if (reallocateModal) reallocateModal.classList.add("hidden");
+        });
+    }
+    if (reallocateModal) {
+        reallocateModal.addEventListener("click", (e) => {
+            if (e.target === reallocateModal) {
+                reallocateModal.classList.add("hidden");
+            }
+        });
+    }
 
 
     // Initialize upload-only mode view
@@ -3376,6 +3406,42 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
             });
 
+            // Clean up any fake draft entries created by dummy dates (e.g. 2026-09-01)
+            let cleanCount = 0;
+            savedSchedules = savedSchedules.filter(item => {
+                if (!item || !item.date) return false;
+                if (item.date.endsWith("-01") && item.time === "09:00 - 11:00" && (!uploadedMonthCode || !item.date.startsWith(uploadedMonthCode))) {
+                    cleanCount++;
+                    return false;
+                }
+                return true;
+            });
+            if (cleanCount > 0) {
+                autoSaveArchive();
+                renderArchiveTable();
+            }
+
+            // Apply manual month overrides for this agent if any
+            Object.keys(trainingMonthOverrides).forEach(key => {
+                if (!key.startsWith(`${name}_`)) return;
+                const courseName = key.substring(name.length + 1);
+                const targetMonth = trainingMonthOverrides[key];
+                
+                if (monthList.includes(targetMonth)) {
+                    monthList.forEach(m => {
+                        alloc1[m] = (alloc1[m] || []).filter(c => c !== courseName);
+                        alloc2[m] = (alloc2[m] || []).filter(c => c !== courseName);
+                    });
+                    if (["高齡課程", "洗防課程"].includes(courseName)) {
+                        alloc2[targetMonth] = alloc2[targetMonth] || [];
+                        alloc2[targetMonth].push(courseName);
+                    } else {
+                        alloc1[targetMonth] = alloc1[targetMonth] || [];
+                        alloc1[targetMonth].push(courseName);
+                    }
+                }
+            });
+
             // Populated to monthlyPlans
             monthList.forEach(m => {
                 const combined = [...(alloc1[m] || []), ...(alloc2[m] || [])];
@@ -3468,8 +3534,10 @@ document.addEventListener("DOMContentLoaded", () => {
                             if (!item.date || typeof item.date !== "string") return;
                             const itemMonth = item.date.substring(0, 7);
                             if (itemMonth === m && plannedCourses.includes(item.course)) {
-                                arranged[item.course] = (arranged[item.course] || 0) + 1;
-                                totalMonthArranged++;
+                                if (!uploadedMonthCode || itemMonth === uploadedMonthCode) {
+                                    arranged[item.course] = (arranged[item.course] || 0) + 1;
+                                    totalMonthArranged++;
+                                }
                             }
                         });
                         
@@ -3519,7 +3587,7 @@ document.addEventListener("DOMContentLoaded", () => {
                         const text = c.completed 
                             ? `${c.name} (${c.arranged}/${c.planned}堂)` 
                             : `${c.name} (尚缺 ${c.planned - c.arranged} 堂，已排 ${c.arranged}/${c.planned})`;
-                        return `<span class="plan-course-tag ${classStyle} clickable-plan-tag" style="cursor: pointer;" title="點擊調整/移動排課日期" data-agent="${agent.name}" data-course="${c.name}" data-month="${m}"><i class="fa-solid ${c.completed ? 'fa-circle-check' : 'fa-circle-dot'}"></i> ${text} <i class="fa-solid fa-calendar-pen" style="font-size: 10px; margin-left: 4px; opacity: 0.8;"></i></span>`;
+                        return `<span class="plan-course-tag ${classStyle} clickable-plan-tag" style="cursor: pointer;" title="點擊更換規劃月份" data-agent="${agent.name}" data-course="${c.name}" data-month="${m}"><i class="fa-solid ${c.completed ? 'fa-circle-check' : 'fa-circle-dot'}"></i> ${text} <i class="fa-solid fa-arrow-right-arrow-left" style="font-size: 10px; margin-left: 4px; opacity: 0.8;"></i></span>`;
                     }).join(" ");
                     
                     return `
@@ -3545,60 +3613,68 @@ document.addEventListener("DOMContentLoaded", () => {
                     </div>
                 `;
 
-                // Bind click listeners for course tags to move dates
+                // Bind click listeners for course tags to reallocate planning month
                 card.querySelectorAll('.clickable-plan-tag').forEach(tag => {
                     tag.addEventListener('click', () => {
                         const agentName = tag.getAttribute('data-agent');
                         const courseName = tag.getAttribute('data-course');
-                        const targetMonth = tag.getAttribute('data-month');
+                        const currentMonth = tag.getAttribute('data-month');
+
+                        const reallocateModal = document.getElementById("reallocate-month-modal");
+                        const reallocateAgentName = document.getElementById("reallocate-agent-name");
+                        const reallocateCourseName = document.getElementById("reallocate-course-name");
+                        const reallocateCurrentMonth = document.getElementById("reallocate-current-month");
+                        const reallocateTargetSelect = document.getElementById("reallocate-target-month-select");
+
+                        if (!reallocateModal) return;
+
+                        reallocateAgentName.textContent = agentName;
+                        reallocateCourseName.textContent = courseName;
                         
-                        let matchIdx = savedSchedules.findIndex(s => s.name === agentName && s.course === courseName && s.date && s.date.startsWith(targetMonth));
-                        if (matchIdx === -1) {
-                            matchIdx = savedSchedules.findIndex(s => s.name === agentName && s.course === courseName);
-                        }
-                        
-                        if (matchIdx !== -1) {
-                            const item = savedSchedules[matchIdx];
-                            const tempCourse = {
-                                date: item.date,
-                                start_hour: parseInt(item.time.substring(0, 2), 10) || 9,
-                                end_hour: parseInt(item.time.substring(8, 10), 10) || 11,
-                                duration: item.duration || 2,
-                                course: item.course
-                            };
-                            showAlternativeSlots(item.name, 1, tempCourse, matchIdx);
-                        } else {
-                            let resCourse = null;
-                            if (scheduleResult && scheduleResult.scheduled_courses && scheduleResult.scheduled_courses[agentName]) {
-                                resCourse = scheduleResult.scheduled_courses[agentName].find(c => c.course === courseName);
+                        const cParts = currentMonth.split("-");
+                        reallocateCurrentMonth.textContent = `${cParts[0]}年 ${parseInt(cParts[1], 10)}月`;
+
+                        reallocateTargetSelect.innerHTML = "";
+                        monthList.forEach(m => {
+                            const mParts = m.split("-");
+                            const option = document.createElement("option");
+                            option.value = m;
+                            let label = `${mParts[0]}年 ${parseInt(mParts[1], 10)}月`;
+                            if (uploadedMonthCode && m === uploadedMonthCode) {
+                                label += " (當前載入班表)";
                             }
-                            
-                            if (resCourse) {
-                                showAlternativeSlots(agentName, resCourse.course_number || 1, resCourse);
-                            } else {
-                                const newCourseItem = {
-                                    name: agentName,
-                                    date: `${targetMonth}-01`,
-                                    time: "09:00 - 11:00",
-                                    duration: 2,
-                                    course: courseName
-                                };
-                                pushArchiveHistory();
-                                savedSchedules.push(newCourseItem);
-                                const newIdx = savedSchedules.length - 1;
-                                renderArchiveTable();
-                                autoSaveArchive();
+                            if (m === currentMonth) {
+                                label += " [目前規劃]";
+                                option.selected = true;
+                            }
+                            option.textContent = label;
+                            reallocateTargetSelect.appendChild(option);
+                        });
+
+                        const confirmBtn = document.getElementById("confirm-reallocate-btn");
+                        if (confirmBtn) {
+                            const newConfirmBtn = confirmBtn.cloneNode(true);
+                            confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+                            newConfirmBtn.addEventListener("click", () => {
+                                const selectedMonth = reallocateTargetSelect.value;
+                                if (!selectedMonth) return;
+
+                                trainingMonthOverrides[`${agentName}_${courseName}`] = selectedMonth;
+                                try {
+                                    localStorage.setItem("training_month_overrides", JSON.stringify(trainingMonthOverrides));
+                                } catch (e) {
+                                    console.error("Error saving training_month_overrides:", e);
+                                }
+
+                                reallocateModal.classList.add("hidden");
+                                renderTrainingTab();
                                 
-                                const tempCourse = {
-                                    date: newCourseItem.date,
-                                    start_hour: 9,
-                                    end_hour: 11,
-                                    duration: 2,
-                                    course: courseName
-                                };
-                                showAlternativeSlots(agentName, 1, tempCourse, newIdx);
-                            }
+                                const sParts = selectedMonth.split("-");
+                                showUploadStatus(`已成功將 ${agentName} 的「${courseName}」調整至 ${sParts[0]}年 ${parseInt(sParts[1], 10)}月 課程規劃！`, "success");
+                            });
                         }
+
+                        reallocateModal.classList.remove("hidden");
                     });
                 });
 
