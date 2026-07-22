@@ -3208,6 +3208,21 @@ document.addEventListener("DOMContentLoaded", () => {
                 trainingFileNameText.innerHTML = `<i class="fa-solid fa-file-excel" style="color: var(--primary-light); margin-right: 6px;"></i>已成功載入上課提醒檔案 (基準日: ${reminderFileDate})`;
             }
 
+            // Clean up any fake draft entries created by dummy dates (e.g. 2026-09-01)
+            let cleanCount = 0;
+            savedSchedules = savedSchedules.filter(item => {
+                if (!item || !item.date) return false;
+                if (item.date.endsWith("-01") && item.time === "09:00 - 11:00" && (!uploadedMonthCode || !item.date.startsWith(uploadedMonthCode))) {
+                    cleanCount++;
+                    return false;
+                }
+                return true;
+            });
+            if (cleanCount > 0) {
+                autoSaveArchive();
+                renderArchiveTable();
+            }
+
             let maxLimitStr = reminderFileDate.substring(0, 7);
             
             function subtractMonths(dateStr, mCount) {
@@ -3248,226 +3263,208 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
             });
 
-        const monthList = [];
-        let [sY, sM] = startMonthStr.split("-").map(Number);
-        let [eY, eM] = maxLimitStr.split("-").map(Number);
-        let currY = sY;
-        let currM = sM;
-        while (currY < eY || (currY === eY && currM <= eM)) {
-            monthList.push(`${currY}-${String(currM).padStart(2, "0")}`);
-            currM++;
-            if (currM > 12) {
-                currM = 1;
-                currY++;
+            const monthList = [];
+            let [sY, sM] = startMonthStr.split("-").map(Number);
+            let [eY, eM] = maxLimitStr.split("-").map(Number);
+            let currY = sY;
+            let currM = sM;
+            while (currY < eY || (currY === eY && currM <= eM)) {
+                monthList.push(`${currY}-${String(currM).padStart(2, "0")}`);
+                currM++;
+                if (currM > 12) {
+                    currM = 1;
+                    currY++;
+                }
             }
-        }
-        
-        if (monthList.length === 0) {
-            monthList.push(startMonthStr);
-        }
-
-        const monthlyPlans = {};
-        monthList.forEach(m => {
-            monthlyPlans[m] = {};
-            SHIFTS_ALL.forEach(name => {
-                monthlyPlans[m][name] = {};
-            });
-        });
-
-        const agentRequiredList = [];
-
-        trainingData.forEach(agent => {
-            const name = agent.name;
-            const exp = formatExcelDate(agent.expiry);
-            const coursesNeeded = [];
-            let totalNeeded = 0;
             
-            if (agent.internalRemaining > 0) {
-                coursesNeeded.push({ course: "公司內訓", count: agent.internalRemaining, expiry: exp, limit: subtractMonths(exp, 3) });
-                totalNeeded += agent.internalRemaining;
-            }
-            if (agent.insuranceRemaining > 0) {
-                coursesNeeded.push({ course: "保發中心", count: agent.insuranceRemaining, expiry: exp, limit: subtractMonths(exp, 3) });
-                totalNeeded += agent.insuranceRemaining;
-            }
-            if (!agent.seniorCompleted) {
-                coursesNeeded.push({ course: "高齡課程", count: 1, expiry: "2026-12-31", limit: "2026-09" });
-                totalNeeded += 1;
-            }
-            if (!agent.amlCompleted) {
-                coursesNeeded.push({ course: "洗防課程", count: 1, expiry: "2026-12-31", limit: "2026-09" });
-                totalNeeded += 1;
-            }
-            if (!agent.fairCompleted) {
-                coursesNeeded.push({ course: "公平待客", count: 1, expiry: "2026-12-31", limit: "2026-09" });
-                totalNeeded += 1;
+            if (monthList.length === 0) {
+                monthList.push(startMonthStr);
             }
 
-            const items1Hour = [];
-            const items2Hour = [];
-            coursesNeeded.forEach(cReq => {
-                const is2Hour = (cReq.course === "高齡課程" || cReq.course === "洗防課程");
-                for (let i = 0; i < cReq.count; i++) {
-                    if (is2Hour) {
-                        items2Hour.push({ course: cReq.course, limit: cReq.limit });
-                    } else {
-                        items1Hour.push({ course: cReq.course, limit: cReq.limit });
-                    }
-                }
-            });
-
-            // Sort by earliest deadline first (EDF)
-            items1Hour.sort((a, b) => a.limit.localeCompare(b.limit));
-            items2Hour.sort((a, b) => a.limit.localeCompare(b.limit));
-
-            const alloc1 = {};
-            const alloc2 = {};
+            const monthlyPlans = {};
             monthList.forEach(m => {
-                alloc1[m] = [];
-                alloc2[m] = [];
-            });
-
-            function getAvailMonthsForLimit(limitMonth) {
-                const avail = [];
-                let [sY, sM] = startMonthStr.split("-").map(Number);
-                let [lY, lM] = limitMonth.split("-").map(Number);
-                if (isNaN(sY) || isNaN(sM) || isNaN(lY) || isNaN(lM)) {
-                    return [startMonthStr];
-                }
-                let cy = sY, cm = sM;
-                while (cy < lY || (cy === lY && cm <= lM)) {
-                    avail.push(`${cy}-${String(cm).padStart(2, "0")}`);
-                    cm++;
-                    if (cm > 12) {
-                        cm = 1;
-                        cy++;
-                    }
-                }
-                return avail.length > 0 ? avail : [startMonthStr];
-            }
-
-            // Distribute 1-hour items (target cap: 2 per month)
-            items1Hour.forEach(item => {
-                const avail = getAvailMonthsForLimit(item.limit);
-                let bestMonth = null;
-                let minCount = Infinity;
-                
-                const monthsBelowCap = avail.filter(m => (alloc1[m] || []).length < 2);
-                if (monthsBelowCap.length > 0) {
-                    monthsBelowCap.forEach(m => {
-                        const count = (alloc1[m] || []).length;
-                        if (count < minCount) {
-                            minCount = count;
-                            bestMonth = m;
-                        }
-                    });
-                } else {
-                    avail.forEach(m => {
-                        const count = (alloc1[m] || []).length;
-                        if (count < minCount) {
-                            minCount = count;
-                            bestMonth = m;
-                        }
-                    });
-                }
-                
-                if (bestMonth) {
-                    alloc1[bestMonth].push(item.course);
-                }
-            });
-
-            // Distribute 2-hour items (target cap: 1 per month)
-            items2Hour.forEach(item => {
-                const avail = getAvailMonthsForLimit(item.limit);
-                let bestMonth = null;
-                let minCount = Infinity;
-                
-                const monthsBelowCap = avail.filter(m => (alloc2[m] || []).length < 1);
-                if (monthsBelowCap.length > 0) {
-                    monthsBelowCap.forEach(m => {
-                        const count = (alloc2[m] || []).length;
-                        if (count < minCount) {
-                            minCount = count;
-                            bestMonth = m;
-                        }
-                    });
-                } else {
-                    avail.forEach(m => {
-                        const count = (alloc2[m] || []).length;
-                        if (count < minCount) {
-                            minCount = count;
-                            bestMonth = m;
-                        }
-                    });
-                }
-                
-                if (bestMonth) {
-                    alloc2[bestMonth].push(item.course);
-                }
-            });
-
-            // Clean up any fake draft entries created by dummy dates (e.g. 2026-09-01)
-            let cleanCount = 0;
-            savedSchedules = savedSchedules.filter(item => {
-                if (!item || !item.date) return false;
-                if (item.date.endsWith("-01") && item.time === "09:00 - 11:00" && (!uploadedMonthCode || !item.date.startsWith(uploadedMonthCode))) {
-                    cleanCount++;
-                    return false;
-                }
-                return true;
-            });
-            if (cleanCount > 0) {
-                autoSaveArchive();
-                renderArchiveTable();
-            }
-
-            // Apply manual month overrides for this agent if any
-            Object.keys(trainingMonthOverrides).forEach(key => {
-                if (!key.startsWith(`${name}_`)) return;
-                const courseName = key.substring(name.length + 1);
-                const targetMonth = trainingMonthOverrides[key];
-                
-                if (monthList.includes(targetMonth)) {
-                    monthList.forEach(m => {
-                        alloc1[m] = (alloc1[m] || []).filter(c => c !== courseName);
-                        alloc2[m] = (alloc2[m] || []).filter(c => c !== courseName);
-                    });
-                    if (["高齡課程", "洗防課程"].includes(courseName)) {
-                        alloc2[targetMonth] = alloc2[targetMonth] || [];
-                        alloc2[targetMonth].push(courseName);
-                    } else {
-                        alloc1[targetMonth] = alloc1[targetMonth] || [];
-                        alloc1[targetMonth].push(courseName);
-                    }
-                }
-            });
-
-            // Populated to monthlyPlans
-            monthList.forEach(m => {
-                const combined = [...(alloc1[m] || []), ...(alloc2[m] || [])];
-                combined.forEach(courseName => {
-                    if (monthlyPlans[m] && monthlyPlans[m][name]) {
-                        monthlyPlans[m][name][courseName] = (monthlyPlans[m][name][courseName] || 0) + 1;
-                    }
+                monthlyPlans[m] = {};
+                SHIFTS_ALL.forEach(name => {
+                    monthlyPlans[m][name] = {};
                 });
             });
 
-            let totalArranged = 0;
-            savedSchedules.forEach(item => {
-                if (!item || item.name !== name) return;
-                if (item.course && ["公司內訓", "保發中心", "高齡課程", "洗防課程", "公平待客"].includes(item.course)) {
-                    totalArranged++;
-                }
-            });
+            const agentRequiredList = [];
 
-            agentRequiredList.push({
-                name: name,
-                expiry: exp || "2026-12-31",
-                coursesNeeded: coursesNeeded,
-                totalNeeded: totalNeeded,
-                totalArranged: totalArranged
+            trainingData.forEach(agent => {
+                const name = agent.name;
+                const exp = formatExcelDate(agent.expiry);
+                const coursesNeeded = [];
+                let totalNeeded = 0;
+                
+                if (agent.internalRemaining > 0) {
+                    coursesNeeded.push({ course: "公司內訓", count: agent.internalRemaining, expiry: exp, limit: subtractMonths(exp, 3) });
+                    totalNeeded += agent.internalRemaining;
+                }
+                if (agent.insuranceRemaining > 0) {
+                    coursesNeeded.push({ course: "保發中心", count: agent.insuranceRemaining, expiry: exp, limit: subtractMonths(exp, 3) });
+                    totalNeeded += agent.insuranceRemaining;
+                }
+                if (!agent.seniorCompleted) {
+                    coursesNeeded.push({ course: "高齡課程", count: 1, expiry: "2026-12-31", limit: "2026-09" });
+                    totalNeeded += 1;
+                }
+                if (!agent.amlCompleted) {
+                    coursesNeeded.push({ course: "洗防課程", count: 1, expiry: "2026-12-31", limit: "2026-09" });
+                    totalNeeded += 1;
+                }
+                if (!agent.fairCompleted) {
+                    coursesNeeded.push({ course: "公平待客", count: 1, expiry: "2026-12-31", limit: "2026-09" });
+                    totalNeeded += 1;
+                }
+
+                const items1Hour = [];
+                const items2Hour = [];
+                coursesNeeded.forEach(cReq => {
+                    const is2Hour = (cReq.course === "高齡課程" || cReq.course === "洗防課程");
+                    for (let i = 0; i < cReq.count; i++) {
+                        if (is2Hour) {
+                            items2Hour.push({ course: cReq.course, limit: cReq.limit });
+                        } else {
+                            items1Hour.push({ course: cReq.course, limit: cReq.limit });
+                        }
+                    }
+                });
+
+                items1Hour.sort((a, b) => a.limit.localeCompare(b.limit));
+                items2Hour.sort((a, b) => a.limit.localeCompare(b.limit));
+
+                const alloc1 = {};
+                const alloc2 = {};
+                monthList.forEach(m => {
+                    alloc1[m] = [];
+                    alloc2[m] = [];
+                });
+
+                function getAvailMonthsForLimit(limitMonth) {
+                    const avail = [];
+                    let [sY, sM] = startMonthStr.split("-").map(Number);
+                    let [lY, lM] = limitMonth.split("-").map(Number);
+                    if (isNaN(sY) || isNaN(sM) || isNaN(lY) || isNaN(lM)) {
+                        return [startMonthStr];
+                    }
+                    let cy = sY, cm = sM;
+                    while (cy < lY || (cy === lY && cm <= lM)) {
+                        avail.push(`${cy}-${String(cm).padStart(2, "0")}`);
+                        cm++;
+                        if (cm > 12) {
+                            cm = 1;
+                            cy++;
+                        }
+                    }
+                    return avail.length > 0 ? avail : [startMonthStr];
+                }
+
+                items1Hour.forEach(item => {
+                    const avail = getAvailMonthsForLimit(item.limit);
+                    let bestMonth = null;
+                    let minCount = Infinity;
+                    
+                    const monthsBelowCap = avail.filter(m => (alloc1[m] || []).length < 2);
+                    if (monthsBelowCap.length > 0) {
+                        monthsBelowCap.forEach(m => {
+                            const count = (alloc1[m] || []).length;
+                            if (count < minCount) {
+                                minCount = count;
+                                bestMonth = m;
+                            }
+                        });
+                    } else {
+                        avail.forEach(m => {
+                            const count = (alloc1[m] || []).length;
+                            if (count < minCount) {
+                                minCount = count;
+                                bestMonth = m;
+                            }
+                        });
+                    }
+                    
+                    if (bestMonth) {
+                        alloc1[bestMonth].push(item.course);
+                    }
+                });
+
+                items2Hour.forEach(item => {
+                    const avail = getAvailMonthsForLimit(item.limit);
+                    let bestMonth = null;
+                    let minCount = Infinity;
+                    
+                    const monthsBelowCap = avail.filter(m => (alloc2[m] || []).length < 1);
+                    if (monthsBelowCap.length > 0) {
+                        monthsBelowCap.forEach(m => {
+                            const count = (alloc2[m] || []).length;
+                            if (count < minCount) {
+                                minCount = count;
+                                bestMonth = m;
+                            }
+                        });
+                    } else {
+                        avail.forEach(m => {
+                            const count = (alloc2[m] || []).length;
+                            if (count < minCount) {
+                                minCount = count;
+                                bestMonth = m;
+                            }
+                        });
+                    }
+                    
+                    if (bestMonth) {
+                        alloc2[bestMonth].push(item.course);
+                    }
+                });
+
+                // Apply manual month overrides for this agent
+                Object.keys(trainingMonthOverrides).forEach(key => {
+                    if (!key.startsWith(`${name}_`)) return;
+                    const courseName = key.substring(name.length + 1);
+                    const targetMonth = trainingMonthOverrides[key];
+                    
+                    if (monthList.includes(targetMonth)) {
+                        monthList.forEach(m => {
+                            alloc1[m] = (alloc1[m] || []).filter(c => c !== courseName);
+                            alloc2[m] = (alloc2[m] || []).filter(c => c !== courseName);
+                        });
+                        if (["高齡課程", "洗防課程"].includes(courseName)) {
+                            alloc2[targetMonth] = alloc2[targetMonth] || [];
+                            alloc2[targetMonth].push(courseName);
+                        } else {
+                            alloc1[targetMonth] = alloc1[targetMonth] || [];
+                            alloc1[targetMonth].push(courseName);
+                        }
+                    }
+                });
+
+                // Populated to monthlyPlans
+                monthList.forEach(m => {
+                    const combined = [...(alloc1[m] || []), ...(alloc2[m] || [])];
+                    combined.forEach(courseName => {
+                        if (monthlyPlans[m] && monthlyPlans[m][name]) {
+                            monthlyPlans[m][name][courseName] = (monthlyPlans[m][name][courseName] || 0) + 1;
+                        }
+                    });
+                });
+
+                let totalArranged = 0;
+                savedSchedules.forEach(item => {
+                    if (!item || item.name !== name) return;
+                    if (item.course && ["公司內訓", "保發中心", "高齡課程", "洗防課程", "公平待客"].includes(item.course)) {
+                        totalArranged++;
+                    }
+                });
+
+                agentRequiredList.push({
+                    name: name,
+                    expiry: exp || "2026-12-31",
+                    coursesNeeded: coursesNeeded,
+                    totalNeeded: totalNeeded,
+                    totalArranged: totalArranged
+                });
             });
-        });
 
         if (trainingProgressBody) {
             trainingProgressBody.innerHTML = "";
@@ -3615,10 +3612,29 @@ document.addEventListener("DOMContentLoaded", () => {
 
                 // Bind click listeners for course tags to reallocate planning month
                 card.querySelectorAll('.clickable-plan-tag').forEach(tag => {
-                    tag.addEventListener('click', () => {
-                        const agentName = tag.getAttribute('data-agent');
-                        const courseName = tag.getAttribute('data-course');
-                        const currentMonth = tag.getAttribute('data-month');
+                    tag.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const targetEl = e.currentTarget;
+                        const agentName = targetEl.getAttribute('data-agent');
+                        const courseName = targetEl.getAttribute('data-course');
+                        const currentMonth = targetEl.getAttribute('data-month');
+
+                        // If loaded month and scheduled in savedSchedules, offer date adjustment
+                        if (uploadedMonthCode && currentMonth === uploadedMonthCode) {
+                            let matchIdx = savedSchedules.findIndex(s => s.name === agentName && s.course === courseName && s.date && s.date.startsWith(currentMonth));
+                            if (matchIdx !== -1) {
+                                const item = savedSchedules[matchIdx];
+                                const tempCourse = {
+                                    date: item.date,
+                                    start_hour: parseInt(item.time.substring(0, 2), 10) || 9,
+                                    end_hour: parseInt(item.time.substring(8, 10), 10) || 11,
+                                    duration: item.duration || 2,
+                                    course: item.course
+                                };
+                                showAlternativeSlots(item.name, 1, tempCourse, matchIdx);
+                                return;
+                            }
+                        }
 
                         const reallocateModal = document.getElementById("reallocate-month-modal");
                         const reallocateAgentName = document.getElementById("reallocate-agent-name");
@@ -3662,8 +3678,8 @@ document.addEventListener("DOMContentLoaded", () => {
                                 trainingMonthOverrides[`${agentName}_${courseName}`] = selectedMonth;
                                 try {
                                     localStorage.setItem("training_month_overrides", JSON.stringify(trainingMonthOverrides));
-                                } catch (e) {
-                                    console.error("Error saving training_month_overrides:", e);
+                                } catch (err) {
+                                    console.error("Error saving training_month_overrides:", err);
                                 }
 
                                 reallocateModal.classList.add("hidden");
@@ -3681,9 +3697,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 trainingMonthsContainer.appendChild(card);
             });
         }
-        } catch (e) {
-            console.error("Error inside renderTrainingTab:", e);
-        }
+    } catch (e) {
+        console.error("Error inside renderTrainingTab:", e);
     }
 
     // Fullscreen Expansion Listeners for Training Planner Tab
