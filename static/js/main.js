@@ -308,6 +308,40 @@ document.addEventListener("DOMContentLoaded", () => {
         return [(startHour + 4) % 24];
     }
 
+    function getDutyHoursForType(str) {
+        if (!str) return [12, 13, 14, 15, 16, 17, 18, 19, 20];
+        if (str.includes("早班") || str.includes("日班")) {
+            return [12, 13, 14, 15, 16]; // 12:00 - 17:00
+        }
+        if (str.includes("午班")) {
+            return [12, 13, 14, 15, 16, 17, 18, 19, 20]; // 12:00 - 21:00
+        }
+        if (str.includes("晚班")) {
+            return [17, 18, 19, 20]; // 17:00 - 21:00
+        }
+        return [12, 13, 14, 15, 16, 17, 18, 19, 20];
+    }
+
+    function isDutyHourOverlap(dStr, agentName, candidateHours) {
+        if (!initData.dutyDetails || !initData.dutyDetails[dStr] || !initData.dutyDetails[dStr][agentName]) {
+            return false;
+        }
+        const dutyInfo = initData.dutyDetails[dStr][agentName];
+        if (!dutyInfo.hours) return false;
+        return candidateHours.some(h => dutyInfo.hours.includes(h));
+    }
+
+    function getDutyInfoText(dStr, agentName) {
+        if (!initData.dutyDetails || !initData.dutyDetails[dStr] || !initData.dutyDetails[dStr][agentName]) {
+            return "";
+        }
+        const info = initData.dutyDetails[dStr][agentName];
+        if (info.type.includes("早班") || info.type.includes("日班")) return "日班值日 12:00-17:00";
+        if (info.type.includes("午班")) return "午班值日 12:00-21:00";
+        if (info.type.includes("晚班")) return "晚班值日 17:00-21:00";
+        return info.type;
+    }
+
     function handleFileUpload(file) {
         if (!file.name.endsWith(".xlsx")) {
             showUploadStatus("僅支援 .xlsx 格式的 Excel 檔案！", "error");
@@ -412,14 +446,18 @@ document.addEventListener("DOMContentLoaded", () => {
                 
                 // Parse duty agents if they exist
                 const dutyAgents = {};
+                const dutyDetails = {};
                 validDates.forEach(d_str => {
                     dutyAgents[d_str] = [];
+                    dutyDetails[d_str] = {};
                 });
                 
                 for (let r = 2; r <= range.e.r; r++) {
                     const cellE = sheet[XLSX.utils.encode_cell({ r: r, c: 4 })]; // Column E (0-based c:4)
                     const valE = cellE ? cellE.v : null;
                     if (valE && typeof valE === "string" && valE.includes("值日")) {
+                        const valEStr = valE.toString().trim();
+                        const dHours = getDutyHoursForType(valEStr);
                         validDates.forEach(d_str => {
                             const colIdx = colMapping[d_str];
                             const cell = sheet[XLSX.utils.encode_cell({ r: r, c: colIdx })];
@@ -427,7 +465,13 @@ document.addEventListener("DOMContentLoaded", () => {
                             if (rawVal) {
                                 const normVal = normalizeName(rawVal);
                                 if (normVal && SHIFTS_ALL.includes(normVal)) {
-                                    dutyAgents[d_str].push(normVal);
+                                    if (!dutyAgents[d_str].includes(normVal)) {
+                                        dutyAgents[d_str].push(normVal);
+                                    }
+                                    dutyDetails[d_str][normVal] = {
+                                        type: valEStr,
+                                        hours: dHours
+                                    };
                                 }
                             }
                         });
@@ -484,7 +528,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 initData = {
                     dates: validDates,
                     agents: agentsData,
-                    dutyAgents: dutyAgents
+                    dutyAgents: dutyAgents,
+                    dutyDetails: dutyDetails
                 };
                 
                 const yearStr = monthCode.substring(0, 4);
@@ -1673,19 +1718,15 @@ document.addEventListener("DOMContentLoaded", () => {
                 for (let dIdx = 0; dIdx < dates.length; dIdx++) {
                     const dStr = dates[dIdx];
                     
-                    // Any selected agent already has a course scheduled or is a duty agent on this day?
-                    let dayHasCourseOrDuty = false;
+                    // Any selected agent already has a course scheduled on this day?
+                    let dayHasCourse = false;
                     for (let name of selectedAgents) {
                         if (scheduledCourses[name].some(c => c.date === dStr)) {
-                            dayHasCourseOrDuty = true;
-                            break;
-                        }
-                        if (initData.dutyAgents && initData.dutyAgents[dStr] && initData.dutyAgents[dStr].includes(name)) {
-                            dayHasCourseOrDuty = true;
+                            dayHasCourse = true;
                             break;
                         }
                     }
-                    if (dayHasCourseOrDuty) continue;
+                    if (dayHasCourse) continue;
                     
                     // Check working hours and contiguous slots for all selected agents
                     const workingHoursByAgent = {};
@@ -1732,6 +1773,8 @@ document.addEventListener("DOMContentLoaded", () => {
                             }
                         }
                         if (!isContiguous) continue;
+                        
+                        if (selectedAgents.some(a => isDutyHourOverlap(dStr, a, candidateHours))) continue;
                         
                         // Optimize meal hours for all selected agents for this candidate slot
                         const tempMeals = {};
@@ -1928,9 +1971,6 @@ document.addEventListener("DOMContentLoaded", () => {
                     const dayHasCourse = scheduledCourses[name].some(c => c.date === dStr);
                     if (dayHasCourse) return;
                     
-                    const isDutyAgent = initData.dutyAgents && initData.dutyAgents[dStr] && initData.dutyAgents[dStr].includes(name);
-                    if (isDutyAgent) return;
-                    
                     const cellVal = schedule[dStr];
                     const startHour = getAgentShiftHours(cellVal);
                     if (startHour === null) return;
@@ -1951,6 +1991,8 @@ document.addEventListener("DOMContentLoaded", () => {
                             }
                         }
                         if (!isContiguous) continue;
+                        
+                        if (isDutyHourOverlap(dStr, name, candidateHours)) continue;
                         
                         // Overlap check for individual classes:
                         // No two different individual classes should be scheduled at the same time slot across different agents.
@@ -2306,6 +2348,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 
                 minAfter = bestMinOtherOnline;
                 
+                const overlapsDutyHours = isDutyHourOverlap(dStr, agentName, candidateHours);
+                
                 availableSlots.push({
                     date: dStr,
                     startHour: candidateHours[0],
@@ -2317,6 +2361,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     violated: minAfter < minCoverage,
                     isMealOverlap: candidateHours.includes(defaultMealHours[0]),
                     isDutyAgent: isDutyAgent,
+                    overlapsDutyHours: overlapsDutyHours,
                     overlapsOther: overlapsOther
                 });
             }
@@ -2352,9 +2397,14 @@ document.addEventListener("DOMContentLoaded", () => {
                     ? `<span class="meal-overlap-badge" style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; font-size: 0.75rem; background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 4px;" title="此排課時段與同仁預設用餐時間衝突，系統已自動將用餐時間調整至 ${slot.mealHour}:00"><i class="fa-solid fa-utensils"></i> 與預設用餐重疊 (用餐已自動調移至 ${slot.mealHour}:00)</span>`
                     : '';
 
-                const dutyBadge = slot.isDutyAgent
-                    ? `<span class="duty-overlap-badge" style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; font-size: 0.75rem; background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 4px;" title="警示：當日該同仁為值日生"><i class="fa-solid fa-triangle-exclamation"></i> 警示：當日為值日生</span>`
-                    : '';
+                let dutyBadge = '';
+                if (slot.overlapsDutyHours) {
+                    const dutyText = getDutyInfoText(slot.date, agentName);
+                    dutyBadge = `<span class="duty-overlap-badge" style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; font-size: 0.75rem; background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 4px;" title="警示：與值日時段重疊 (${dutyText})"><i class="fa-solid fa-triangle-exclamation"></i> 警示：與值日時段重疊 (${dutyText})</span>`;
+                } else if (slot.isDutyAgent) {
+                    const dutyText = getDutyInfoText(slot.date, agentName);
+                    dutyBadge = `<span class="duty-info-badge" style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; font-size: 0.75rem; background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 4px;" title="當日為值日同仁 (${dutyText})，此時段非值日時段"><i class="fa-solid fa-user-shield"></i> 當日值日 (${dutyText})</span>`;
+                }
 
                 const courseOverlapBadge = slot.overlapsOther
                     ? `<span class="course-overlap-badge" style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; font-size: 0.75rem; background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 4px;" title="與其他同仁之課程時間重疊"><i class="fa-solid fa-triangle-exclamation"></i> 與其他課程時間重疊</span>`
