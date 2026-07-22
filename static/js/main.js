@@ -309,17 +309,18 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function getDutyHoursForType(str) {
-        if (!str) return [12, 13, 14, 15, 16, 17, 18, 19, 20];
-        if (str.includes("早班") || str.includes("日班")) {
-            return [12, 13, 14, 15, 16]; // 12:00 - 17:00
-        }
-        if (str.includes("午班")) {
-            return [12, 13, 14, 15, 16, 17, 18, 19, 20]; // 12:00 - 21:00
-        }
-        if (str.includes("晚班")) {
+        if (!str) return [17, 18, 19, 20];
+        const s = str.toString().trim();
+        if (s.includes("晚班") || s.includes("17:00") || s.includes("17-21") || s.includes("17:00-21:00")) {
             return [17, 18, 19, 20]; // 17:00 - 21:00
         }
-        return [12, 13, 14, 15, 16, 17, 18, 19, 20];
+        if (s.includes("早班") || s.includes("日班") || s.includes("12:00-17:00") || s.includes("12-17")) {
+            return [12, 13, 14, 15, 16]; // 12:00 - 17:00
+        }
+        if (s.includes("午班") || s.includes("12:00-21:00") || s.includes("12-21")) {
+            return [12, 13, 14, 15, 16, 17, 18, 19, 20]; // 12:00 - 21:00
+        }
+        return [17, 18, 19, 20];
     }
 
     function isDutyHourOverlap(dStr, agentName, candidateHours) {
@@ -336,9 +337,10 @@ document.addEventListener("DOMContentLoaded", () => {
             return "";
         }
         const info = initData.dutyDetails[dStr][agentName];
-        if (info.type.includes("早班") || info.type.includes("日班")) return "日班值日 12:00-17:00";
-        if (info.type.includes("午班")) return "午班值日 12:00-21:00";
-        if (info.type.includes("晚班")) return "晚班值日 17:00-21:00";
+        const t = info.type || "";
+        if (t.includes("早班") || t.includes("日班") || t.includes("12:00-17:00")) return "日班值日 12:00-17:00";
+        if (t.includes("午班") || t.includes("12:00-21:00")) return "午班值日 12:00-21:00";
+        if (t.includes("晚班") || t.includes("17:00") || t.includes("17-21")) return "晚班值日 17:00-21:00";
         return info.type;
     }
 
@@ -2437,7 +2439,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 const afterClass = slot.violated ? 'warn' : 'ok';
                 
                 const mealOverlapBadge = slot.isMealOverlap 
-                    ? `<span class="meal-overlap-badge" style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; font-size: 0.75rem; background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 4px;" title="此排課時段與同仁預設用餐時間衝突，系統已自動將用餐時間調整至 ${slot.mealHour}:00"><i class="fa-solid fa-utensils"></i> 與預設用餐重疊 (用餐已自動調移至 ${slot.mealHour}:00)</span>`
+                    ? `<span class="meal-overlap-badge" style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; font-size: 0.75rem; background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 4px;" title="此排課時段與同仁預設用餐時間衝突，需要客服人員主動協調"><i class="fa-solid fa-utensils"></i> 與預設用餐重疊 (需要客服人員主動協調)</span>`
                     : '';
 
                 let dutyBadge = '';
