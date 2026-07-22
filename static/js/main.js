@@ -246,6 +246,38 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
+    let activeTrainingSubTab = "pending"; // "pending" or "completed"
+    const subtabPendingBtn = document.getElementById("subtab-pending-btn");
+    const subtabCompletedBtn = document.getElementById("subtab-completed-btn");
+
+    if (subtabPendingBtn && subtabCompletedBtn) {
+        subtabPendingBtn.addEventListener("click", () => {
+            activeTrainingSubTab = "pending";
+            subtabPendingBtn.style.background = "var(--primary)";
+            subtabPendingBtn.style.color = "#fff";
+            subtabPendingBtn.style.fontWeight = "600";
+
+            subtabCompletedBtn.style.background = "transparent";
+            subtabCompletedBtn.style.color = "var(--text-muted)";
+            subtabCompletedBtn.style.fontWeight = "500";
+
+            renderTrainingTab();
+        });
+
+        subtabCompletedBtn.addEventListener("click", () => {
+            activeTrainingSubTab = "completed";
+            subtabCompletedBtn.style.background = "var(--primary)";
+            subtabCompletedBtn.style.color = "#fff";
+            subtabCompletedBtn.style.fontWeight = "600";
+
+            subtabPendingBtn.style.background = "transparent";
+            subtabPendingBtn.style.color = "var(--text-muted)";
+            subtabPendingBtn.style.fontWeight = "500";
+
+            renderTrainingTab();
+        });
+    }
+
     const SHIFTS_ALL = [
         "Alex Chen", "Amber Wang", "Evan Liu", "Howard Chen", 
         "Jacky Lee", "Jian Kai Ding", "Molly Song", "Rex Liao", "Sherry Lin"
@@ -3319,6 +3351,15 @@ document.addEventListener("DOMContentLoaded", () => {
                 });
             });
 
+            // Count pending vs completed agents
+            const pendingAgentsCount = unarrangedTableData.filter(item => item.totalUnarranged > 0).length;
+            const completedAgentsCount = unarrangedTableData.filter(item => item.totalUnarranged === 0).length;
+
+            const subtabPendingCount = document.getElementById("subtab-pending-count");
+            const subtabCompletedCount = document.getElementById("subtab-completed-count");
+            if (subtabPendingCount) subtabPendingCount.textContent = pendingAgentsCount;
+            if (subtabCompletedCount) subtabCompletedCount.textContent = completedAgentsCount;
+
             // Populate top summary trainingProgressBody if element exists
             if (trainingProgressBody) {
                 trainingProgressBody.innerHTML = "";
@@ -3364,6 +3405,15 @@ document.addEventListener("DOMContentLoaded", () => {
                 });
             }
 
+            // Filter table data based on activeTrainingSubTab
+            const displayTableData = unarrangedTableData.filter(item => {
+                if (activeTrainingSubTab === "completed") {
+                    return item.totalUnarranged === 0; // Includes '無需修課' and '已全部排定'
+                } else {
+                    return item.totalUnarranged > 0; // '未完成'
+                }
+            });
+
             // Render Unarranged Courses Table inside trainingMonthsContainer
             if (trainingMonthsContainer) {
                 trainingMonthsContainer.innerHTML = "";
@@ -3389,12 +3439,20 @@ document.addEventListener("DOMContentLoaded", () => {
                 `;
                 trainingMonthsContainer.appendChild(summaryBar);
 
+                if (displayTableData.length === 0) {
+                    const emptyMsg = activeTrainingSubTab === "completed" 
+                        ? `<div style="text-align: center; color: var(--text-muted); padding: 60px 0;"><i class="fa-solid fa-hourglass-start" style="font-size: 3rem; margin-bottom: 12px;"></i><p>尚無已完訓或已全部排定之同仁資料</p></div>`
+                        : `<div style="text-align: center; color: #34d399; padding: 60px 0;"><i class="fa-solid fa-circle-check" style="font-size: 3rem; margin-bottom: 12px;"></i><p style="font-size: 1.1rem; font-weight: 600;">🎉 太棒了！全體同仁課程皆已完成排定！</p></div>`;
+                    trainingMonthsContainer.innerHTML += emptyMsg;
+                    return;
+                }
+
                 // Table Element
                 const tableWrapper = document.createElement("div");
                 tableWrapper.style.cssText = "overflow-x: auto; flex: 1;";
 
                 let tbodyHTML = "";
-                unarrangedTableData.forEach(item => {
+                displayTableData.forEach(item => {
                     let statusBadge = "";
                     if (item.totalNeeded === 0) {
                         statusBadge = `<span class="training-progress-badge none" style="font-size: 11px;">無需修課</span>`;

@@ -479,19 +479,29 @@
                             <div class="training-main-layout" style="display: flex; gap: 20px; flex: 1; min-height: 0;">
                                 <!-- Right side: Planning by months -->
                                 <div class="training-plan-card" id="training-schedule-card" style="flex: 1; width: 100%; min-width: 0; display: flex; flex-direction: column; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 16px; min-height: 0;">
-                                    <h5 style="margin: 0 0 12px 0; font-size: 0.95rem; font-weight: 700; color: #fff; display: flex; align-items: center; justify-content: space-between;">
+                                    <h5 style="margin: 0 0 12px 0; font-size: 0.95rem; font-weight: 700; color: #fff; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
                                         <div style="display: flex; align-items: center; gap: 6px;">
-                                            <i class="fa-solid fa-table-list" style="color: var(--primary-light);"></i> 尚未安排課程項目清單 (前 3 個月完成，已扣除排程存檔紀錄)
+                                            <i class="fa-solid fa-table-list" style="color: var(--primary-light);"></i> 課程未來規劃與對照表 (已自動扣除存檔紀錄)
                                         </div>
-                                        <button class="expand-btn" id="expand-plan-btn" title="放大檢視">
-                                            <i class="fa-solid fa-expand"></i>
-                                        </button>
+                                        <div style="display: flex; align-items: center; gap: 8px;">
+                                            <div class="sub-tab-group" style="display: flex; background: rgba(255, 255, 255, 0.05); padding: 3px; border-radius: 8px; border: 1px solid var(--border-color);">
+                                                <button id="subtab-pending-btn" style="padding: 4px 12px; font-size: 0.8rem; border: none; background: var(--primary); color: #fff; border-radius: 6px; cursor: pointer; font-weight: 600; transition: all 0.2s;">
+                                                    <i class="fa-solid fa-hourglass-half" style="margin-right: 4px;"></i>未完成 (<span id="subtab-pending-count">0</span>)
+                                                </button>
+                                                <button id="subtab-completed-btn" style="padding: 4px 12px; font-size: 0.8rem; border: none; background: transparent; color: var(--text-muted); border-radius: 6px; cursor: pointer; font-weight: 500; transition: all 0.2s;">
+                                                    <i class="fa-solid fa-circle-check" style="margin-right: 4px;"></i>已完成 (<span id="subtab-completed-count">0</span>)
+                                                </button>
+                                            </div>
+                                            <button class="expand-btn" id="expand-plan-btn" title="放大檢視">
+                                                <i class="fa-solid fa-expand"></i>
+                                            </button>
+                                        </div>
                                     </h5>
                                     <!-- Unarranged courses table container -->
                                     <div id="training-months-container" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; padding-right: 4px;">
                                         <div style="text-align: center; color: var(--text-muted); padding: 80px 0;">
                                             <i class="fa-solid fa-clipboard-list" style="font-size: 3rem; margin-bottom: 12px; color: var(--border-color);"></i>
-                                            <p>請上載上課提醒資料以產生尚未安排課程清單表格</p>
+                                            <p>請上載上課提醒資料以產生課程規劃對照表</p>
                                         </div>
                                     </div>
                                 </div>
