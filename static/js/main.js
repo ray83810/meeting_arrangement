@@ -289,7 +289,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!shiftStr) return null;
         const s = shiftStr.toString().trim();
         if (s === "OFF" || s === "PTO" || s === "ST") return null;
-        const match = s.match(/(\d{2}):(\d{2})/);
+        const match = s.match(/(\d{1,2}):(\d{2})/);
         if (match) {
             return parseInt(match[1], 10);
         }
@@ -301,7 +301,7 @@ document.addEventListener("DOMContentLoaded", () => {
             return [(startHour + 4) % 24]; // default to 5th hour (index 4)
         }
         const s = mealVal.toString().trim();
-        const matches = [...s.matchAll(/(\d{2}):(\d{2})/g)];
+        const matches = [...s.matchAll(/(\d{1,2}):(\d{2})/g)];
         if (matches.length > 0) {
             return matches.map(m => parseInt(m[1], 10));
         }
@@ -1929,7 +1929,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     if (dayHasCourse) return;
                     
                     const isDutyAgent = initData.dutyAgents && initData.dutyAgents[dStr] && initData.dutyAgents[dStr].includes(name);
-                    if (isDutyAgent) return;
+                    const dutyPenalty = isDutyAgent ? 10 : 0;
                     
                     const cellVal = schedule[dStr];
                     const startHour = getAgentShiftHours(cellVal);
@@ -2033,7 +2033,7 @@ document.addEventListener("DOMContentLoaded", () => {
                             });
                         });
                         
-                        const score = bestMinOtherOnline - (coursesOnDay * 0.05);
+                        const score = bestMinOtherOnline - (coursesOnDay * 0.05) - dutyPenalty;
                         
                         if (bestSlot === null || score > bestScore || (Math.abs(score - bestScore) < 0.01 && bestSumOtherOnline > bestSumOnline)) {
                             bestSlot = { date: dStr, startHour: candidateHours[0], hours: candidateHours, meal: bestMealHour };
@@ -2186,13 +2186,11 @@ document.addEventListener("DOMContentLoaded", () => {
         dates.forEach(dStr => {
             // Must not have another course on this day (excluding current course day)
             const dayHasOtherCourse = scheduleResult
-                ? scheduleResult.scheduled_courses[agentName].some(c => c.date === dStr && c.date !== currentCourse.date)
+                ? scheduleResult.scheduled_courses[agentName].some(c => c.date === dStr && (c.date !== currentCourse.date || c.start_hour !== currentCourse.start_hour))
                 : false;
             if (dayHasOtherCourse) return;
             
-            // Must not be a duty agent on this day
             const isDutyAgent = initData.dutyAgents && initData.dutyAgents[dStr] && initData.dutyAgents[dStr].includes(agentName);
-            if (isDutyAgent) return;
             
             const cellVal = schedule[dStr];
             const startHour = getAgentShiftHours(cellVal);
@@ -2222,10 +2220,10 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
                 if (!isContiguous) continue;
                 
-                // If individual schedule, must not overlap with another agent's course
+                // Check if candidate slot overlaps with another agent's course
+                let overlapsOther = false;
                 const isJointClass = scheduleResult ? scheduleResult.joint_class : false;
                 if (!isJointClass) {
-                    let overlapsOther = false;
                     const activeCoursesMap = getActiveScheduledCourses();
                     for (let otherAgent of Object.keys(activeCoursesMap)) {
                         if (otherAgent === agentName) continue;
@@ -2247,7 +2245,6 @@ document.addEventListener("DOMContentLoaded", () => {
                             break;
                         }
                     }
-                    if (overlapsOther) continue;
                 }
                 
                 const R = P.filter(h => !candidateHours.includes(h));
@@ -2318,7 +2315,9 @@ document.addEventListener("DOMContentLoaded", () => {
                     minAfter: minAfter,
                     mealHour: bestMealHour,
                     violated: minAfter < minCoverage,
-                    isMealOverlap: candidateHours.includes(defaultMealHours[0])
+                    isMealOverlap: candidateHours.includes(defaultMealHours[0]),
+                    isDutyAgent: isDutyAgent,
+                    overlapsOther: overlapsOther
                 });
             }
         });
@@ -2350,7 +2349,15 @@ document.addEventListener("DOMContentLoaded", () => {
                 const afterClass = slot.violated ? 'warn' : 'ok';
                 
                 const mealOverlapBadge = slot.isMealOverlap 
-                    ? `<span class="meal-overlap-badge" style="display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; padding: 2px 6px; font-size: 0.75rem; background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 4px;" title="此排課時段與同仁預設用餐時間衝突，系統已自動將用餐時間調整至 ${slot.mealHour}:00"><i class="fa-solid fa-utensils"></i> 與預設用餐重疊 (用餐已自動調移至 ${slot.mealHour}:00)</span>`
+                    ? `<span class="meal-overlap-badge" style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; font-size: 0.75rem; background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 4px;" title="此排課時段與同仁預設用餐時間衝突，系統已自動將用餐時間調整至 ${slot.mealHour}:00"><i class="fa-solid fa-utensils"></i> 與預設用餐重疊 (用餐已自動調移至 ${slot.mealHour}:00)</span>`
+                    : '';
+
+                const dutyBadge = slot.isDutyAgent
+                    ? `<span class="duty-overlap-badge" style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; font-size: 0.75rem; background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 4px;" title="當日該同仁為值日同仁"><i class="fa-solid fa-user-shield"></i> 當日為值日同仁</span>`
+                    : '';
+
+                const courseOverlapBadge = slot.overlapsOther
+                    ? `<span class="course-overlap-badge" style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; font-size: 0.75rem; background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 4px;" title="與其他同仁之課程時間重疊"><i class="fa-solid fa-triangle-exclamation"></i> 與其他課程時間重疊</span>`
                     : '';
 
                 row.innerHTML = `
@@ -2358,6 +2365,8 @@ document.addEventListener("DOMContentLoaded", () => {
                         <span class="slot-date">${slot.date} (${dayOfWeek})</span>
                         <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 4px; margin-top: 4px;">
                             <span class="slot-hour"><i class="fa-solid fa-clock"></i> ${timeStr} | 用餐: ${slot.mealHour}:00</span>
+                            ${dutyBadge}
+                            ${courseOverlapBadge}
                             ${mealOverlapBadge}
                         </div>
                     </div>
