@@ -3380,11 +3380,14 @@ document.addEventListener("DOMContentLoaded", () => {
                     if (agent.unarrangedCourses.length === 0) {
                         coursesHTML = `<span style="color: #34d399;"><i class="fa-solid fa-circle-check"></i> 無尚缺項目</span>`;
                     } else {
-                        coursesHTML = agent.unarrangedCourses.map(c => `
-                            <div style="margin-bottom: 4px;">
-                                <strong>${c.course}</strong>: 尚缺 ${c.unarranged} 堂 (已扣 ${c.arranged} 堂/需 ${c.needed} 堂，截止: ${c.limitMonth})
-                            </div>
-                        `).join("");
+                        coursesHTML = agent.unarrangedCourses.map(c => {
+                            const courseNote = (c.course === "高齡課程") ? "（3小時）" : "（1小時）";
+                            return `
+                                <div style="margin-bottom: 4px;">
+                                    <strong>${c.course}</strong> <span style="font-size: 0.75rem; color: var(--text-muted);">${courseNote}</span>: 尚缺 ${c.unarranged} 堂 (已扣 ${c.arranged} 堂/需 ${c.needed} 堂，截止: ${c.limitMonth})
+                                </div>
+                            `;
+                        }).join("");
                     }
 
                     tr.innerHTML = `
@@ -3462,20 +3465,22 @@ document.addEventListener("DOMContentLoaded", () => {
                         statusBadge = `<span class="training-progress-badge pending" style="font-size: 11px;"><i class="fa-solid fa-circle-exclamation"></i> 尚缺 ${item.totalUnarranged} 堂</span>`;
                     }
 
-                    let coursesDetailHTML = "";
                     if (item.unarrangedCourses.length === 0) {
                         coursesDetailHTML = `<span style="color: #34d399; font-size: 0.85rem;"><i class="fa-solid fa-check-double" style="margin-right: 4px;"></i>所有課程皆已安排完畢</span>`;
                     } else {
-                        coursesDetailHTML = item.unarrangedCourses.map(c => `
-                            <div style="margin-bottom: 6px; font-size: 0.85rem; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-                                <span style="background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); padding: 3px 8px; border-radius: 4px; font-weight: 600;">
-                                    ${c.course} x ${c.unarranged} 堂
-                                </span>
-                                <span style="color: var(--text-secondary); font-size: 0.75rem;">
-                                    (原需 ${c.needed} 堂，存檔已排 ${c.arranged} 堂｜應完成截止月: <strong style="color: #fff;">${c.limitMonth} 前</strong>)
-                                </span>
-                            </div>
-                        `).join("");
+                        coursesDetailHTML = item.unarrangedCourses.map(c => {
+                            const courseNote = (c.course === "高齡課程") ? "（3小時）" : "（1小時）";
+                            return `
+                                <div style="margin-bottom: 6px; font-size: 0.85rem; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                                    <span style="background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); padding: 3px 8px; border-radius: 4px; font-weight: 600;">
+                                        ${c.course} x ${c.unarranged} 堂 <span style="font-weight: 400; opacity: 0.85; font-size: 0.75rem;">${courseNote}</span>
+                                    </span>
+                                    <span style="color: var(--text-secondary); font-size: 0.75rem;">
+                                        (原需 ${c.needed} 堂，存檔已排 ${c.arranged} 堂｜應完成截止月: <strong style="color: #fff;">${c.limitMonth} 前</strong>)
+                                    </span>
+                                </div>
+                            `;
+                        }).join("");
                     }
 
                     tbodyHTML += `
