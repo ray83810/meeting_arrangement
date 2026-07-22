@@ -1929,7 +1929,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     if (dayHasCourse) return;
                     
                     const isDutyAgent = initData.dutyAgents && initData.dutyAgents[dStr] && initData.dutyAgents[dStr].includes(name);
-                    const dutyPenalty = isDutyAgent ? 10 : 0;
+                    if (isDutyAgent) return;
                     
                     const cellVal = schedule[dStr];
                     const startHour = getAgentShiftHours(cellVal);
@@ -2033,7 +2033,7 @@ document.addEventListener("DOMContentLoaded", () => {
                             });
                         });
                         
-                        const score = bestMinOtherOnline - (coursesOnDay * 0.05) - dutyPenalty;
+                        const score = bestMinOtherOnline - (coursesOnDay * 0.05);
                         
                         if (bestSlot === null || score > bestScore || (Math.abs(score - bestScore) < 0.01 && bestSumOtherOnline > bestSumOnline)) {
                             bestSlot = { date: dStr, startHour: candidateHours[0], hours: candidateHours, meal: bestMealHour };
@@ -2353,7 +2353,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     : '';
 
                 const dutyBadge = slot.isDutyAgent
-                    ? `<span class="duty-overlap-badge" style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; font-size: 0.75rem; background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 4px;" title="當日該同仁為值日同仁"><i class="fa-solid fa-user-shield"></i> 當日為值日同仁</span>`
+                    ? `<span class="duty-overlap-badge" style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; font-size: 0.75rem; background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 4px;" title="警示：當日該同仁為值日生"><i class="fa-solid fa-triangle-exclamation"></i> 警示：當日為值日生</span>`
                     : '';
 
                 const courseOverlapBadge = slot.overlapsOther
