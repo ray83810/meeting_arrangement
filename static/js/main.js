@@ -342,6 +342,17 @@ document.addEventListener("DOMContentLoaded", () => {
         return info.type;
     }
 
+    function getMinSchedulingDate() {
+        const startDateSelect = document.getElementById("start-date-select");
+        if (startDateSelect && startDateSelect.value) {
+            return startDateSelect.value;
+        }
+        if (initData && initData.dates && initData.dates.length > 0) {
+            return initData.dates[0];
+        }
+        return "0000-00-00";
+    }
+
     function handleFileUpload(file) {
         if (!file.name.endsWith(".xlsx")) {
             showUploadStatus("僅支援 .xlsx 格式的 Excel 檔案！", "error");
@@ -531,6 +542,32 @@ document.addEventListener("DOMContentLoaded", () => {
                     dutyAgents: dutyAgents,
                     dutyDetails: dutyDetails
                 };
+
+                const startDateGroup = document.getElementById("start-date-group");
+                const startDateSelect = document.getElementById("start-date-select");
+                if (startDateGroup && startDateSelect) {
+                    startDateGroup.style.display = "block";
+                    startDateSelect.innerHTML = "";
+                    
+                    const todayStr = new Date().toISOString().substring(0, 10);
+                    let defaultIndex = 0;
+                    
+                    validDates.forEach((dStr, idx) => {
+                        const option = document.createElement("option");
+                        option.value = dStr;
+                        const dParts = new Date(dStr);
+                        const wDays = ["日", "一", "二", "三", "四", "五", "六"];
+                        const dayOfWeek = wDays[dParts.getDay()];
+                        option.textContent = `${dStr} (${dayOfWeek})`;
+                        startDateSelect.appendChild(option);
+                        
+                        if (dStr === todayStr) {
+                            defaultIndex = idx;
+                        }
+                    });
+                    
+                    startDateSelect.selectedIndex = defaultIndex;
+                }
                 
                 const yearStr = monthCode.substring(0, 4);
                 const monthStr = monthCode.substring(4);
@@ -1707,6 +1744,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         
         const failedSchedules = [];
+        const minSchedulingDate = getMinSchedulingDate();
         
         if (jointClass) {
             // Multi-person joint meeting logic (all selected agents attend at the same time)
@@ -1717,6 +1755,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 
                 for (let dIdx = 0; dIdx < dates.length; dIdx++) {
                     const dStr = dates[dIdx];
+                    if (dStr < minSchedulingDate) continue;
                     
                     // Any selected agent already has a course scheduled on this day?
                     let dayHasCourse = false;
@@ -1968,6 +2007,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 let bestSumOnline = -999;
                 
                 dates.forEach(dStr => {
+                    if (dStr < minSchedulingDate) return;
                     const dayHasCourse = scheduledCourses[name].some(c => c.date === dStr);
                     if (dayHasCourse) return;
                     
@@ -2224,8 +2264,11 @@ document.addEventListener("DOMContentLoaded", () => {
         const minCoverage = parseInt(document.getElementById("coverage-select").value, 10) || 0;
         
         const availableSlots = [];
+        const minSchedulingDate = getMinSchedulingDate();
         
         dates.forEach(dStr => {
+            if (dStr < minSchedulingDate) return;
+            
             // Must not have another course on this day (excluding current course day)
             const dayHasOtherCourse = scheduleResult
                 ? scheduleResult.scheduled_courses[agentName].some(c => c.date === dStr && (c.date !== currentCourse.date || c.start_hour !== currentCourse.start_hour))
