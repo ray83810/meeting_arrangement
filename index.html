@@ -224,20 +224,20 @@
             <div class="tab-container">
                 <div class="tab-header-wrapper">
                     <div class="tab-header">
-                        <button class="tab-btn active" data-tab="calendar-tab">
+                        <button class="tab-btn active" data-tab="list-tab">
+                            <i class="fa-solid fa-list-check"></i> 排課結果清單
+                        </button>
+                        <button class="tab-btn" data-tab="calendar-tab">
                             <i class="fa-solid fa-calendar-days"></i> 月曆檢視
                         </button>
                         <button class="tab-btn" data-tab="heatmap-tab">
                             <i class="fa-solid fa-fire"></i> 人力覆蓋熱力圖
                         </button>
-                        <button class="tab-btn" data-tab="list-tab">
-                            <i class="fa-solid fa-list-check"></i> 排課結果清單
-                        </button>
                         <button class="tab-btn" data-tab="archive-tab">
                             <i class="fa-solid fa-box-archive"></i> 排程存檔紀錄
                         </button>
                         <button class="tab-btn" data-tab="training-tab">
-                            <i class="fa-solid fa-graduation-cap"></i> 證照課程規劃
+                            <i class="fa-solid fa-graduation-cap"></i> 課程未來規劃
                         </button>
                     </div>
                 </div>
@@ -259,7 +259,7 @@
                     </div>
 
                     <!-- Tab 1: Calendar View -->
-                    <div id="calendar-tab" class="tab-panel active hidden">
+                    <div id="calendar-tab" class="tab-panel hidden">
                         <div class="calendar-layout">
                             <div class="calendar-main">
                                 <div class="calendar-nav">
@@ -361,11 +361,14 @@
                     </div>
 
                     <!-- Tab 3: List View -->
-                    <div id="list-tab" class="tab-panel hidden">
+                    <div id="list-tab" class="tab-panel active">
                         <div class="list-container-box">
                             <div class="list-header">
                                 <h4>當月課程/會議表清單</h4>
                                 <div class="list-actions">
+                                    <button id="save-list-to-archive-btn" class="secondary-btn" style="background: rgba(13, 148, 136, 0.15); border: 1px solid rgba(13, 148, 136, 0.4); color: var(--primary-light); font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                                        <i class="fa-solid fa-cloud-arrow-up"></i> 儲存至存檔紀錄
+                                    </button>
                                     <button id="export-csv-btn" class="secondary-btn">
                                         <i class="fa-solid fa-file-csv"></i> 匯出 CSV 檔
                                     </button>
@@ -522,6 +525,17 @@
                         <span class="info-label">目前時段:</span>
                         <span id="modal-current-time" class="info-val">-</span>
                     </div>
+                </div>
+                
+                <div class="custom-date-picker-row" style="margin-top: 14px; margin-bottom: 16px; padding: 12px 16px; background: rgba(255, 255, 255, 0.03); border: 1px dashed var(--border-color); border-radius: 8px; display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <i class="fa-solid fa-calendar-day" style="color: var(--primary-light);"></i>
+                        <span style="font-size: 0.85rem; color: var(--text-secondary);">或手動移至指定日期：</span>
+                        <input type="date" id="custom-target-date-input" style="padding: 6px 10px; font-size: 0.85rem; background: var(--bg-card); color: #fff; border: 1px solid var(--border-color); border-radius: 6px; color-scheme: dark;">
+                    </div>
+                    <button id="apply-custom-date-btn" class="primary-btn" style="padding: 6px 14px; font-size: 0.85rem; border-radius: 6px; cursor: pointer; white-space: nowrap;">
+                        <i class="fa-solid fa-check"></i> 套用新日期
+                    </button>
                 </div>
                 
                 <h4 class="slots-section-title"><i class="fa-solid fa-list-check"></i> 可行替換時段與在線人力</h4>

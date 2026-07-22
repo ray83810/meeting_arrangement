@@ -2503,6 +2503,50 @@ document.addEventListener("DOMContentLoaded", () => {
                 altSlotsList.appendChild(row);
             });
         }
+
+        // Handle Custom Target Date Selection
+        const customDateInput = document.getElementById("custom-target-date-input");
+        const applyCustomDateBtn = document.getElementById("apply-custom-date-btn");
+        if (customDateInput) {
+            customDateInput.value = currentCourse.date || "";
+        }
+        if (applyCustomDateBtn) {
+            const newBtn = applyCustomDateBtn.cloneNode(true);
+            applyCustomDateBtn.parentNode.replaceChild(newBtn, applyCustomDateBtn);
+            newBtn.addEventListener("click", () => {
+                const targetDate = document.getElementById("custom-target-date-input").value;
+                if (!targetDate) {
+                    alert("請選擇或輸入有效的日期！");
+                    return;
+                }
+
+                if (archiveRowIndex !== null && archiveRowIndex !== undefined) {
+                    pushArchiveHistory();
+                    savedSchedules[archiveRowIndex].date = targetDate;
+                    renderArchiveTable();
+                    if (uploadedMonthCode) {
+                        renderCalendar(uploadedMonthCode);
+                        renderHeatmap();
+                        const minCoverage = parseInt(document.getElementById("coverage-select").value, 10) || 0;
+                        renderStats(minCoverage);
+                    }
+                    renderTrainingTab();
+                    autoSaveArchive();
+                    altModal.classList.add("hidden");
+                    showUploadStatus(`已成功將 ${agentName} 的課程安排調整至新日期：${targetDate}！`, "success");
+                } else {
+                    const customSlot = {
+                        date: targetDate,
+                        startHour: currentCourse.start_hour || 9,
+                        duration: currentCourse.duration || 2,
+                        mealHour: currentCourse.start_hour ? (currentCourse.start_hour + currentCourse.duration) : 12
+                    };
+                    moveCourseToSlot(agentName, currentCourse, customSlot);
+                    renderTrainingTab();
+                    altModal.classList.add("hidden");
+                }
+            });
+        }
         
         altModal.classList.remove("hidden");
     }
@@ -2982,6 +3026,13 @@ document.addEventListener("DOMContentLoaded", () => {
         autoSaveArchive();
         showUploadStatus(`已成功將當前排課結果（共新增了 ${addedCount} 筆排程）儲存至瀏覽器存檔中！`, "success");
     });
+
+    const saveListToArchiveBtn = document.getElementById("save-list-to-archive-btn");
+    if (saveListToArchiveBtn) {
+        saveListToArchiveBtn.addEventListener("click", () => {
+            saveCurrentBtn.click();
+        });
+    }
 
     clearArchiveBtn.addEventListener("click", () => {
         if (confirm("您確定要清空所有的排程存檔嗎？此動作無法復原。")) {
@@ -3466,7 +3517,7 @@ document.addEventListener("DOMContentLoaded", () => {
                         const text = c.completed 
                             ? `${c.name} (${c.arranged}/${c.planned}堂)` 
                             : `${c.name} (尚缺 ${c.planned - c.arranged} 堂，已排 ${c.arranged}/${c.planned})`;
-                        return `<span class="plan-course-tag ${classStyle}"><i class="fa-solid ${c.completed ? 'fa-circle-check' : 'fa-circle-dot'}"></i> ${text}</span>`;
+                        return `<span class="plan-course-tag ${classStyle} clickable-plan-tag" style="cursor: pointer;" title="點擊調整/移動排課日期" data-agent="${agent.name}" data-course="${c.name}" data-month="${m}"><i class="fa-solid ${c.completed ? 'fa-circle-check' : 'fa-circle-dot'}"></i> ${text} <i class="fa-solid fa-calendar-pen" style="font-size: 10px; margin-left: 4px; opacity: 0.8;"></i></span>`;
                     }).join(" ");
                     
                     return `
@@ -3491,6 +3542,64 @@ document.addEventListener("DOMContentLoaded", () => {
                         ${agentsHTML}
                     </div>
                 `;
+
+                // Bind click listeners for course tags to move dates
+                card.querySelectorAll('.clickable-plan-tag').forEach(tag => {
+                    tag.addEventListener('click', () => {
+                        const agentName = tag.getAttribute('data-agent');
+                        const courseName = tag.getAttribute('data-course');
+                        const targetMonth = tag.getAttribute('data-month');
+                        
+                        let matchIdx = savedSchedules.findIndex(s => s.name === agentName && s.course === courseName && s.date && s.date.startsWith(targetMonth));
+                        if (matchIdx === -1) {
+                            matchIdx = savedSchedules.findIndex(s => s.name === agentName && s.course === courseName);
+                        }
+                        
+                        if (matchIdx !== -1) {
+                            const item = savedSchedules[matchIdx];
+                            const tempCourse = {
+                                date: item.date,
+                                start_hour: parseInt(item.time.substring(0, 2), 10) || 9,
+                                end_hour: parseInt(item.time.substring(8, 10), 10) || 11,
+                                duration: item.duration || 2,
+                                course: item.course
+                            };
+                            showAlternativeSlots(item.name, 1, tempCourse, matchIdx);
+                        } else {
+                            let resCourse = null;
+                            if (scheduleResult && scheduleResult.scheduled_courses && scheduleResult.scheduled_courses[agentName]) {
+                                resCourse = scheduleResult.scheduled_courses[agentName].find(c => c.course === courseName);
+                            }
+                            
+                            if (resCourse) {
+                                showAlternativeSlots(agentName, resCourse.course_number || 1, resCourse);
+                            } else {
+                                const newCourseItem = {
+                                    name: agentName,
+                                    date: `${targetMonth}-01`,
+                                    time: "09:00 - 11:00",
+                                    duration: 2,
+                                    course: courseName
+                                };
+                                pushArchiveHistory();
+                                savedSchedules.push(newCourseItem);
+                                const newIdx = savedSchedules.length - 1;
+                                renderArchiveTable();
+                                autoSaveArchive();
+                                
+                                const tempCourse = {
+                                    date: newCourseItem.date,
+                                    start_hour: 9,
+                                    end_hour: 11,
+                                    duration: 2,
+                                    course: courseName
+                                };
+                                showAlternativeSlots(agentName, 1, tempCourse, newIdx);
+                            }
+                        }
+                    });
+                });
+
                 trainingMonthsContainer.appendChild(card);
             });
         }
