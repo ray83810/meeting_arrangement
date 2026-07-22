@@ -3186,6 +3186,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // Render Training Audit & Planning Tab
+    // Render Training Audit & Planning Tab (Unarranged Courses Table View)
     function renderTrainingTab() {
         try {
             if (!trainingData || !reminderFileDate) {
@@ -3193,6 +3194,14 @@ document.addEventListener("DOMContentLoaded", () => {
                     trainingFileStatus.innerHTML = `
                         <i class="fa-solid fa-circle-info" style="color: var(--text-muted);"></i>
                         <span>尚未上傳上課提醒資料</span>
+                    `;
+                }
+                if (trainingMonthsContainer) {
+                    trainingMonthsContainer.innerHTML = `
+                        <div style="text-align: center; color: var(--text-muted); padding: 80px 0;">
+                            <i class="fa-solid fa-clipboard-list" style="font-size: 3rem; margin-bottom: 12px; color: var(--border-color);"></i>
+                            <p>請上載上課提醒資料以產生尚未安排課程清單表格</p>
+                        </div>
                     `;
                 }
                 return;
@@ -3208,23 +3217,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 trainingFileNameText.innerHTML = `<i class="fa-solid fa-file-excel" style="color: var(--primary-light); margin-right: 6px;"></i>已成功載入上課提醒檔案 (基準日: ${reminderFileDate})`;
             }
 
-            // Clean up any fake draft entries created by dummy dates (e.g. 2026-09-01)
-            let cleanCount = 0;
-            savedSchedules = savedSchedules.filter(item => {
-                if (!item || !item.date) return false;
-                if (item.date.endsWith("-01") && item.time === "09:00 - 11:00" && (!uploadedMonthCode || !item.date.startsWith(uploadedMonthCode))) {
-                    cleanCount++;
-                    return false;
-                }
-                return true;
-            });
-            if (cleanCount > 0) {
-                autoSaveArchive();
-                renderArchiveTable();
-            }
+            const reminderMonth = reminderFileDate ? reminderFileDate.substring(0, 7) : "0000-00";
 
-            let maxLimitStr = reminderFileDate.substring(0, 7);
-            
             function subtractMonths(dateStr, mCount) {
                 if (!dateStr || typeof dateStr !== "string") return "2026-09";
                 const parts = dateStr.substring(0, 7).split("-");
@@ -3239,468 +3233,239 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
                 return `${y}-${String(m).padStart(2, "0")}`;
             }
-            
-            function compareMonths(m1, m2) {
-                return m1.localeCompare(m2);
-            }
 
-            const startMonthStr = reminderFileDate.substring(0, 7);
-            
+            const unarrangedTableData = [];
+            let totalUnarrangedAllAgents = 0;
+            let totalNeededAllAgents = 0;
+            let totalArrangedAllAgents = 0;
+
             trainingData.forEach(agent => {
                 if (!agent) return;
-                const exp = formatExcelDate(agent.expiry);
-                if ((agent.internalRemaining > 0 || agent.insuranceRemaining > 0) && exp) {
-                    const limit = subtractMonths(exp, 3);
-                    if (compareMonths(limit, maxLimitStr) > 0) {
-                        maxLimitStr = limit;
-                    }
-                }
-                if (!agent.seniorCompleted || !agent.amlCompleted || !agent.fairCompleted) {
-                    const limit = "2026-09";
-                    if (compareMonths(limit, maxLimitStr) > 0) {
-                        maxLimitStr = limit;
-                    }
-                }
-            });
-
-            const monthList = [];
-            let [sY, sM] = startMonthStr.split("-").map(Number);
-            let [eY, eM] = maxLimitStr.split("-").map(Number);
-            let currY = sY;
-            let currM = sM;
-            while (currY < eY || (currY === eY && currM <= eM)) {
-                monthList.push(`${currY}-${String(currM).padStart(2, "0")}`);
-                currM++;
-                if (currM > 12) {
-                    currM = 1;
-                    currY++;
-                }
-            }
-            
-            if (monthList.length === 0) {
-                monthList.push(startMonthStr);
-            }
-
-            const monthlyPlans = {};
-            monthList.forEach(m => {
-                monthlyPlans[m] = {};
-                SHIFTS_ALL.forEach(name => {
-                    monthlyPlans[m][name] = {};
-                });
-            });
-
-            const agentRequiredList = [];
-
-            trainingData.forEach(agent => {
                 const name = agent.name;
                 const exp = formatExcelDate(agent.expiry);
-                const coursesNeeded = [];
-                let totalNeeded = 0;
+                const expDisplay = exp || "2026-12-31";
+                const targetLimitMonth = exp ? subtractMonths(exp, 3) : "2026-09";
                 
+                const rawRequirements = [];
                 if (agent.internalRemaining > 0) {
-                    coursesNeeded.push({ course: "公司內訓", count: agent.internalRemaining, expiry: exp, limit: subtractMonths(exp, 3) });
-                    totalNeeded += agent.internalRemaining;
+                    rawRequirements.push({ course: "公司內訓", count: agent.internalRemaining });
                 }
                 if (agent.insuranceRemaining > 0) {
-                    coursesNeeded.push({ course: "保發中心", count: agent.insuranceRemaining, expiry: exp, limit: subtractMonths(exp, 3) });
-                    totalNeeded += agent.insuranceRemaining;
+                    rawRequirements.push({ course: "保發中心", count: agent.insuranceRemaining });
                 }
                 if (!agent.seniorCompleted) {
-                    coursesNeeded.push({ course: "高齡課程", count: 1, expiry: "2026-12-31", limit: "2026-09" });
-                    totalNeeded += 1;
+                    rawRequirements.push({ course: "高齡課程", count: 1 });
                 }
                 if (!agent.amlCompleted) {
-                    coursesNeeded.push({ course: "洗防課程", count: 1, expiry: "2026-12-31", limit: "2026-09" });
-                    totalNeeded += 1;
+                    rawRequirements.push({ course: "洗防課程", count: 1 });
                 }
                 if (!agent.fairCompleted) {
-                    coursesNeeded.push({ course: "公平待客", count: 1, expiry: "2026-12-31", limit: "2026-09" });
-                    totalNeeded += 1;
+                    rawRequirements.push({ course: "公平待客", count: 1 });
                 }
 
-                const items1Hour = [];
-                const items2Hour = [];
-                coursesNeeded.forEach(cReq => {
-                    const is2Hour = (cReq.course === "高齡課程" || cReq.course === "洗防課程");
-                    for (let i = 0; i < cReq.count; i++) {
-                        if (is2Hour) {
-                            items2Hour.push({ course: cReq.course, limit: cReq.limit });
-                        } else {
-                            items1Hour.push({ course: cReq.course, limit: cReq.limit });
+                // Filter saved schedules for this agent on/after reminderMonth
+                const agentSaved = savedSchedules.filter(item => 
+                    item && item.name === name && item.date && item.date.substring(0, 7) >= reminderMonth
+                );
+                const copyAgentSaved = [...agentSaved];
+
+                const unarrangedCourses = [];
+                let agentTotalNeeded = 0;
+                let agentTotalArranged = 0;
+                let agentTotalUnarranged = 0;
+
+                rawRequirements.forEach(req => {
+                    const cname = req.course;
+                    const reqCount = req.count;
+                    agentTotalNeeded += reqCount;
+
+                    let arrangedCount = 0;
+                    for (let i = 0; i < reqCount; i++) {
+                        const idx = copyAgentSaved.findIndex(item => item.course === cname);
+                        if (idx !== -1) {
+                            copyAgentSaved.splice(idx, 1);
+                            arrangedCount++;
                         }
                     }
-                });
 
-                items1Hour.sort((a, b) => a.limit.localeCompare(b.limit));
-                items2Hour.sort((a, b) => a.limit.localeCompare(b.limit));
+                    const unarrangedCount = Math.max(0, reqCount - arrangedCount);
+                    agentTotalArranged += arrangedCount;
+                    agentTotalUnarranged += unarrangedCount;
 
-                const alloc1 = {};
-                const alloc2 = {};
-                monthList.forEach(m => {
-                    alloc1[m] = [];
-                    alloc2[m] = [];
-                });
-
-                function getAvailMonthsForLimit(limitMonth) {
-                    const avail = [];
-                    let [sY, sM] = startMonthStr.split("-").map(Number);
-                    let [lY, lM] = limitMonth.split("-").map(Number);
-                    if (isNaN(sY) || isNaN(sM) || isNaN(lY) || isNaN(lM)) {
-                        return [startMonthStr];
-                    }
-                    let cy = sY, cm = sM;
-                    while (cy < lY || (cy === lY && cm <= lM)) {
-                        avail.push(`${cy}-${String(cm).padStart(2, "0")}`);
-                        cm++;
-                        if (cm > 12) {
-                            cm = 1;
-                            cy++;
-                        }
-                    }
-                    return avail.length > 0 ? avail : [startMonthStr];
-                }
-
-                items1Hour.forEach(item => {
-                    const avail = getAvailMonthsForLimit(item.limit);
-                    let bestMonth = null;
-                    let minCount = Infinity;
-                    
-                    const monthsBelowCap = avail.filter(m => (alloc1[m] || []).length < 2);
-                    if (monthsBelowCap.length > 0) {
-                        monthsBelowCap.forEach(m => {
-                            const count = (alloc1[m] || []).length;
-                            if (count < minCount) {
-                                minCount = count;
-                                bestMonth = m;
-                            }
-                        });
-                    } else {
-                        avail.forEach(m => {
-                            const count = (alloc1[m] || []).length;
-                            if (count < minCount) {
-                                minCount = count;
-                                bestMonth = m;
-                            }
+                    if (unarrangedCount > 0) {
+                        const courseLimit = (cname === "高齡課程" || cname === "洗防課程" || cname === "公平待客") ? "2026-09" : targetLimitMonth;
+                        unarrangedCourses.push({
+                            course: cname,
+                            needed: reqCount,
+                            arranged: arrangedCount,
+                            unarranged: unarrangedCount,
+                            limitMonth: courseLimit
                         });
                     }
-                    
-                    if (bestMonth) {
-                        alloc1[bestMonth].push(item.course);
-                    }
                 });
 
-                items2Hour.forEach(item => {
-                    const avail = getAvailMonthsForLimit(item.limit);
-                    let bestMonth = null;
-                    let minCount = Infinity;
-                    
-                    const monthsBelowCap = avail.filter(m => (alloc2[m] || []).length < 1);
-                    if (monthsBelowCap.length > 0) {
-                        monthsBelowCap.forEach(m => {
-                            const count = (alloc2[m] || []).length;
-                            if (count < minCount) {
-                                minCount = count;
-                                bestMonth = m;
-                            }
-                        });
-                    } else {
-                        avail.forEach(m => {
-                            const count = (alloc2[m] || []).length;
-                            if (count < minCount) {
-                                minCount = count;
-                                bestMonth = m;
-                            }
-                        });
-                    }
-                    
-                    if (bestMonth) {
-                        alloc2[bestMonth].push(item.course);
-                    }
-                });
+                totalNeededAllAgents += agentTotalNeeded;
+                totalArrangedAllAgents += agentTotalArranged;
+                totalUnarrangedAllAgents += agentTotalUnarranged;
 
-                // Apply manual month overrides for this agent
-                Object.keys(trainingMonthOverrides).forEach(key => {
-                    if (!key.startsWith(`${name}_`)) return;
-                    const courseName = key.substring(name.length + 1);
-                    const targetMonth = trainingMonthOverrides[key];
-                    
-                    if (monthList.includes(targetMonth)) {
-                        monthList.forEach(m => {
-                            alloc1[m] = (alloc1[m] || []).filter(c => c !== courseName);
-                            alloc2[m] = (alloc2[m] || []).filter(c => c !== courseName);
-                        });
-                        if (["高齡課程", "洗防課程"].includes(courseName)) {
-                            alloc2[targetMonth] = alloc2[targetMonth] || [];
-                            alloc2[targetMonth].push(courseName);
-                        } else {
-                            alloc1[targetMonth] = alloc1[targetMonth] || [];
-                            alloc1[targetMonth].push(courseName);
-                        }
-                    }
-                });
-
-                // Populated to monthlyPlans
-                monthList.forEach(m => {
-                    const combined = [...(alloc1[m] || []), ...(alloc2[m] || [])];
-                    combined.forEach(courseName => {
-                        if (monthlyPlans[m] && monthlyPlans[m][name]) {
-                            monthlyPlans[m][name][courseName] = (monthlyPlans[m][name][courseName] || 0) + 1;
-                        }
-                    });
-                });
-
-                let totalArranged = 0;
-                savedSchedules.forEach(item => {
-                    if (!item || item.name !== name) return;
-                    if (item.course && ["公司內訓", "保發中心", "高齡課程", "洗防課程", "公平待客"].includes(item.course)) {
-                        totalArranged++;
-                    }
-                });
-
-                agentRequiredList.push({
+                unarrangedTableData.push({
                     name: name,
-                    expiry: exp || "2026-12-31",
-                    coursesNeeded: coursesNeeded,
-                    totalNeeded: totalNeeded,
-                    totalArranged: totalArranged
+                    expiry: expDisplay,
+                    limitMonth: targetLimitMonth,
+                    totalNeeded: agentTotalNeeded,
+                    totalArranged: agentTotalArranged,
+                    totalUnarranged: agentTotalUnarranged,
+                    unarrangedCourses: unarrangedCourses
                 });
             });
 
-        if (trainingProgressBody) {
-            trainingProgressBody.innerHTML = "";
-            agentRequiredList.forEach(agent => {
-                const tr = document.createElement("tr");
-                const progressPct = agent.totalNeeded > 0 ? Math.min(100, Math.round((agent.totalArranged / agent.totalNeeded) * 100)) : 100;
-                
-                let statusBadge = "";
-                if (agent.totalNeeded === 0) {
-                    statusBadge = `<span class="training-progress-badge none">無需修課</span>`;
-                } else if (agent.totalArranged >= agent.totalNeeded) {
-                    statusBadge = `<span class="training-progress-badge completed"><i class="fa-solid fa-circle-check"></i> 已排完</span>`;
-                } else {
-                    statusBadge = `<span class="training-progress-badge pending">尚缺 ${agent.totalNeeded - agent.totalArranged} 堂</span>`;
-                }
-
-                let coursesHTML = "";
-                if (agent.coursesNeeded.length === 0) {
-                    coursesHTML = `<span style="color: var(--text-muted);">無未完訓項目</span>`;
-                } else {
-                    coursesHTML = agent.coursesNeeded.map(c => `
-                        <div style="margin-bottom: 4px;">
-                            <strong>${c.course}</strong>: 需修 ${c.count} 堂 (截止: ${c.limit})
-                        </div>
-                    `).join("");
-                }
-
-                tr.innerHTML = `
-                    <td class="strong" style="vertical-align: top;">${agent.name}</td>
-                    <td style="vertical-align: top; color: var(--text-secondary);">${agent.expiry}</td>
-                    <td style="vertical-align: top;">
-                        <div style="margin-bottom: 6px;">${coursesHTML}</div>
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <div class="progress-mini-track" style="flex: 1;">
-                                <div class="progress-mini-bar" style="width: ${progressPct}%;"></div>
-                            </div>
-                            <span style="font-size: 10px; color: var(--text-secondary); min-width: 28px; text-align: right;">${progressPct}%</span>
-                            ${statusBadge}
-                        </div>
-                    </td>
-                `;
-                trainingProgressBody.appendChild(tr);
-            });
-        }
-
-        if (trainingMonthsContainer) {
-            trainingMonthsContainer.innerHTML = "";
-            
-            monthList.forEach(m => {
-                const card = document.createElement("div");
-                card.className = "month-plan-card";
-                
-                const agentsInMonth = [];
-                let totalMonthPlanned = 0;
-                let totalMonthArranged = 0;
-                
-                SHIFTS_ALL.forEach(name => {
-                    const plans = monthlyPlans[m][name] || {};
-                    const plannedCourses = Object.keys(plans);
-                    if (plannedCourses.length > 0) {
-                        const arranged = {};
-                        savedSchedules.forEach(item => {
-                            if (!item || item.name !== name) return;
-                            if (!item.date || typeof item.date !== "string") return;
-                            const itemMonth = item.date.substring(0, 7);
-                            if (itemMonth === m && plannedCourses.includes(item.course)) {
-                                if (!uploadedMonthCode || itemMonth === uploadedMonthCode) {
-                                    arranged[item.course] = (arranged[item.course] || 0) + 1;
-                                    totalMonthArranged++;
-                                }
-                            }
-                        });
-                        
-                        let agentAllCompleted = true;
-                        const coursesDetails = plannedCourses.map(cname => {
-                            const plannedCount = plans[cname];
-                            const arrangedCount = arranged[cname] || 0;
-                            totalMonthPlanned += plannedCount;
-                            
-                            const isCompleted = arrangedCount >= plannedCount;
-                            if (!isCompleted) {
-                                agentAllCompleted = false;
-                            }
-                            
-                            return {
-                                name: cname,
-                                planned: plannedCount,
-                                arranged: arrangedCount,
-                                completed: isCompleted
-                            };
-                        });
-                        
-                        agentsInMonth.push({
-                            name: name,
-                            courses: coursesDetails,
-                            completed: agentAllCompleted
-                        });
-                    }
-                });
-                
-                if (agentsInMonth.length === 0) return;
-                
-                const monthParts = m.split("-");
-                const titleStr = `${monthParts[0]}年 ${parseInt(monthParts[1], 10)}月`;
-                const summaryStr = `規劃排定 ${totalMonthPlanned} 堂，已排 ${totalMonthArranged} 堂`;
-                
-                let headerStatusBadge = "";
-                if (totalMonthArranged >= totalMonthPlanned) {
-                    headerStatusBadge = `<span class="training-progress-badge completed" style="font-size: 11px;"><i class="fa-solid fa-circle-check"></i> 本月規劃已排滿</span>`;
-                } else {
-                    headerStatusBadge = `<span class="training-progress-badge pending" style="font-size: 11px;">本月尚缺 ${totalMonthPlanned - totalMonthArranged} 堂</span>`;
-                }
-
-                let agentsHTML = agentsInMonth.map(agent => {
-                    const coursesTagsHTML = agent.courses.map(c => {
-                        const classStyle = c.completed ? 'completed' : 'pending';
-                        const text = c.completed 
-                            ? `${c.name} (${c.arranged}/${c.planned}堂)` 
-                            : `${c.name} (尚缺 ${c.planned - c.arranged} 堂，已排 ${c.arranged}/${c.planned})`;
-                        return `<span class="plan-course-tag ${classStyle} clickable-plan-tag" style="cursor: pointer;" title="點擊更換規劃月份" data-agent="${agent.name}" data-course="${c.name}" data-month="${m}"><i class="fa-solid ${c.completed ? 'fa-circle-check' : 'fa-circle-dot'}"></i> ${text} <i class="fa-solid fa-arrow-right-arrow-left" style="font-size: 10px; margin-left: 4px; opacity: 0.8;"></i></span>`;
-                    }).join(" ");
+            // Populate top summary trainingProgressBody if element exists
+            if (trainingProgressBody) {
+                trainingProgressBody.innerHTML = "";
+                unarrangedTableData.forEach(agent => {
+                    const tr = document.createElement("tr");
+                    const progressPct = agent.totalNeeded > 0 ? Math.min(100, Math.round((agent.totalArranged / agent.totalNeeded) * 100)) : 100;
                     
-                    return `
-                        <div class="month-plan-agent-row">
-                            <strong style="width: 80px; color: #fff;">${agent.name}</strong>
-                            <div class="month-plan-courses-list" style="flex: 1; margin-left: 10px;">
-                                ${coursesTagsHTML}
-                            </div>
-                        </div>
-                    `;
-                }).join("");
+                    let statusBadge = "";
+                    if (agent.totalNeeded === 0) {
+                        statusBadge = `<span class="training-progress-badge none">無需修課</span>`;
+                    } else if (agent.totalUnarranged === 0) {
+                        statusBadge = `<span class="training-progress-badge completed"><i class="fa-solid fa-circle-check"></i> 已全排完</span>`;
+                    } else {
+                        statusBadge = `<span class="training-progress-badge pending">尚缺 ${agent.totalUnarranged} 堂</span>`;
+                    }
 
-                card.innerHTML = `
-                    <div class="month-plan-header">
-                        <div>
-                            <span class="month-plan-title"><i class="fa-solid fa-calendar-days" style="margin-right: 6px;"></i>${titleStr}</span>
-                            <span class="month-plan-summary" style="margin-left: 12px; color: var(--text-muted);">${summaryStr}</span>
-                        </div>
-                        ${headerStatusBadge}
+                    let coursesHTML = "";
+                    if (agent.unarrangedCourses.length === 0) {
+                        coursesHTML = `<span style="color: #34d399;"><i class="fa-solid fa-circle-check"></i> 無尚缺項目</span>`;
+                    } else {
+                        coursesHTML = agent.unarrangedCourses.map(c => `
+                            <div style="margin-bottom: 4px;">
+                                <strong>${c.course}</strong>: 尚缺 ${c.unarranged} 堂 (已扣 ${c.arranged} 堂/需 ${c.needed} 堂，截止: ${c.limitMonth})
+                            </div>
+                        `).join("");
+                    }
+
+                    tr.innerHTML = `
+                        <td class="strong" style="vertical-align: top;">${agent.name}</td>
+                        <td style="vertical-align: top; color: var(--text-secondary);">${agent.expiry}</td>
+                        <td style="vertical-align: top;">
+                            <div style="margin-bottom: 6px;">${coursesHTML}</div>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <div class="progress-mini-track" style="flex: 1;">
+                                    <div class="progress-mini-bar" style="width: ${progressPct}%;"></div>
+                                </div>
+                                <span style="font-size: 10px; color: var(--text-secondary); min-width: 28px; text-align: right;">${progressPct}%</span>
+                                ${statusBadge}
+                            </div>
+                        </td>
+                    `;
+                    trainingProgressBody.appendChild(tr);
+                });
+            }
+
+            // Render Unarranged Courses Table inside trainingMonthsContainer
+            if (trainingMonthsContainer) {
+                trainingMonthsContainer.innerHTML = "";
+
+                // Summary Stats Bar
+                const summaryBar = document.createElement("div");
+                summaryBar.style.cssText = "display: flex; gap: 16px; margin-bottom: 16px; background: rgba(255,255,255,0.03); padding: 12px 16px; border-radius: 8px; border: 1px solid var(--border-color); align-items: center; justify-content: space-around;";
+                summaryBar.innerHTML = `
+                    <div style="text-align: center;">
+                        <span style="font-size: 11px; color: var(--text-muted); display: block;">總應修課程堂數</span>
+                        <strong style="font-size: 1.1rem; color: #fff;">${totalNeededAllAgents} 堂</strong>
                     </div>
-                    <div class="month-plan-body">
-                        ${agentsHTML}
+                    <div style="width: 1px; height: 24px; background: var(--border-color);"></div>
+                    <div style="text-align: center;">
+                        <span style="font-size: 11px; color: var(--text-muted); display: block;">存檔紀錄已排定 (自動扣除)</span>
+                        <strong style="font-size: 1.1rem; color: var(--primary-light);">${totalArrangedAllAgents} 堂</strong>
+                    </div>
+                    <div style="width: 1px; height: 24px; background: var(--border-color);"></div>
+                    <div style="text-align: center;">
+                        <span style="font-size: 11px; color: var(--text-muted); display: block;">尚未安排總堂數</span>
+                        <strong style="font-size: 1.1rem; color: ${totalUnarrangedAllAgents > 0 ? '#f87171' : '#34d399'};">${totalUnarrangedAllAgents} 堂</strong>
                     </div>
                 `;
+                trainingMonthsContainer.appendChild(summaryBar);
 
-                // Bind click listeners for course tags to reallocate planning month
-                card.querySelectorAll('.clickable-plan-tag').forEach(tag => {
-                    tag.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        const targetEl = e.currentTarget;
-                        const agentName = targetEl.getAttribute('data-agent');
-                        const courseName = targetEl.getAttribute('data-course');
-                        const currentMonth = targetEl.getAttribute('data-month');
+                // Table Element
+                const tableWrapper = document.createElement("div");
+                tableWrapper.style.cssText = "overflow-x: auto; flex: 1;";
 
-                        // If loaded month and scheduled in savedSchedules, offer date adjustment
-                        if (uploadedMonthCode && currentMonth === uploadedMonthCode) {
-                            let matchIdx = savedSchedules.findIndex(s => s.name === agentName && s.course === courseName && s.date && s.date.startsWith(currentMonth));
-                            if (matchIdx !== -1) {
-                                const item = savedSchedules[matchIdx];
-                                const tempCourse = {
-                                    date: item.date,
-                                    start_hour: parseInt(item.time.substring(0, 2), 10) || 9,
-                                    end_hour: parseInt(item.time.substring(8, 10), 10) || 11,
-                                    duration: item.duration || 2,
-                                    course: item.course
-                                };
-                                showAlternativeSlots(item.name, 1, tempCourse, matchIdx);
-                                return;
-                            }
-                        }
+                let tbodyHTML = "";
+                unarrangedTableData.forEach(item => {
+                    let statusBadge = "";
+                    if (item.totalNeeded === 0) {
+                        statusBadge = `<span class="training-progress-badge none" style="font-size: 11px;">無需修課</span>`;
+                    } else if (item.totalUnarranged === 0) {
+                        statusBadge = `<span class="training-progress-badge completed" style="font-size: 11px;"><i class="fa-solid fa-circle-check"></i> 已全部排定</span>`;
+                    } else {
+                        statusBadge = `<span class="training-progress-badge pending" style="font-size: 11px;"><i class="fa-solid fa-circle-exclamation"></i> 尚缺 ${item.totalUnarranged} 堂</span>`;
+                    }
 
-                        const reallocateModal = document.getElementById("reallocate-month-modal");
-                        const reallocateAgentName = document.getElementById("reallocate-agent-name");
-                        const reallocateCourseName = document.getElementById("reallocate-course-name");
-                        const reallocateCurrentMonth = document.getElementById("reallocate-current-month");
-                        const reallocateTargetSelect = document.getElementById("reallocate-target-month-select");
+                    let coursesDetailHTML = "";
+                    if (item.unarrangedCourses.length === 0) {
+                        coursesDetailHTML = `<span style="color: #34d399; font-size: 0.85rem;"><i class="fa-solid fa-check-double" style="margin-right: 4px;"></i>所有課程皆已安排完畢</span>`;
+                    } else {
+                        coursesDetailHTML = item.unarrangedCourses.map(c => `
+                            <div style="margin-bottom: 6px; font-size: 0.85rem; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                                <span style="background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); padding: 3px 8px; border-radius: 4px; font-weight: 600;">
+                                    ${c.course} x ${c.unarranged} 堂
+                                </span>
+                                <span style="color: var(--text-secondary); font-size: 0.75rem;">
+                                    (原需 ${c.needed} 堂，存檔已排 ${c.arranged} 堂｜應完成截止月: <strong style="color: #fff;">${c.limitMonth} 前</strong>)
+                                </span>
+                            </div>
+                        `).join("");
+                    }
 
-                        if (!reallocateModal) return;
-
-                        reallocateAgentName.textContent = agentName;
-                        reallocateCourseName.textContent = courseName;
-                        
-                        const cParts = currentMonth.split("-");
-                        reallocateCurrentMonth.textContent = `${cParts[0]}年 ${parseInt(cParts[1], 10)}月`;
-
-                        reallocateTargetSelect.innerHTML = "";
-                        monthList.forEach(m => {
-                            const mParts = m.split("-");
-                            const option = document.createElement("option");
-                            option.value = m;
-                            let label = `${mParts[0]}年 ${parseInt(mParts[1], 10)}月`;
-                            if (uploadedMonthCode && m === uploadedMonthCode) {
-                                label += " (當前載入班表)";
-                            }
-                            if (m === currentMonth) {
-                                label += " [目前規劃]";
-                                option.selected = true;
-                            }
-                            option.textContent = label;
-                            reallocateTargetSelect.appendChild(option);
-                        });
-
-                        const confirmBtn = document.getElementById("confirm-reallocate-btn");
-                        if (confirmBtn) {
-                            const newConfirmBtn = confirmBtn.cloneNode(true);
-                            confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
-                            newConfirmBtn.addEventListener("click", () => {
-                                const selectedMonth = reallocateTargetSelect.value;
-                                if (!selectedMonth) return;
-
-                                trainingMonthOverrides[`${agentName}_${courseName}`] = selectedMonth;
-                                try {
-                                    localStorage.setItem("training_month_overrides", JSON.stringify(trainingMonthOverrides));
-                                } catch (err) {
-                                    console.error("Error saving training_month_overrides:", err);
-                                }
-
-                                reallocateModal.classList.add("hidden");
-                                renderTrainingTab();
-                                
-                                const sParts = selectedMonth.split("-");
-                                showUploadStatus(`已成功將 ${agentName} 的「${courseName}」調整至 ${sParts[0]}年 ${parseInt(sParts[1], 10)}月 課程規劃！`, "success");
-                            });
-                        }
-
-                        reallocateModal.classList.remove("hidden");
-                    });
+                    tbodyHTML += `
+                        <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                            <td class="strong" style="padding: 12px; vertical-align: top; font-weight: 600; color: #fff;">${item.name}</td>
+                            <td style="padding: 12px; vertical-align: top; color: #fbbf24; font-weight: 500;">
+                                <i class="fa-solid fa-clock-rotate-left" style="margin-right: 4px; font-size: 0.8rem;"></i>${item.expiry}
+                            </td>
+                            <td style="padding: 12px; vertical-align: top; color: var(--text-secondary);">
+                                <span style="background: rgba(255,255,255,0.05); padding: 3px 8px; border-radius: 4px; border: 1px solid var(--border-color); color: #fff;">${item.limitMonth} 前</span>
+                            </td>
+                            <td style="padding: 12px; vertical-align: top;">
+                                ${coursesDetailHTML}
+                            </td>
+                            <td style="padding: 12px; vertical-align: top; text-align: center;">
+                                <strong style="font-size: 1rem; color: ${item.totalUnarranged > 0 ? '#f87171' : '#34d399'};">${item.totalUnarranged} 堂</strong>
+                            </td>
+                            <td style="padding: 12px; vertical-align: top; text-align: center;">
+                                ${statusBadge}
+                            </td>
+                        </tr>
+                    `;
                 });
 
-                trainingMonthsContainer.appendChild(card);
-            });
+                tableWrapper.innerHTML = `
+                    <table class="schedule-table" style="width: 100%; border-collapse: collapse; text-align: left;">
+                        <thead>
+                            <tr style="background: rgba(255,255,255,0.03); border-bottom: 1px solid var(--border-color);">
+                                <th style="padding: 10px 12px;">客服人員</th>
+                                <th style="padding: 10px 12px;">訓練到期日</th>
+                                <th style="padding: 10px 12px;">應完成截止月 (前3個月)</th>
+                                <th style="padding: 10px 12px;">尚未安排之課程內容 (已自動扣除存檔紀錄)</th>
+                                <th style="padding: 10px 12px; text-align: center;">尚缺總堂數</th>
+                                <th style="padding: 10px 12px; text-align: center;">狀態</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${tbodyHTML}
+                        </tbody>
+                    </table>
+                `;
+                trainingMonthsContainer.appendChild(tableWrapper);
+            }
+
+        } catch (e) {
+            console.error("Error inside renderTrainingTab:", e);
         }
-    } catch (e) {
-        console.error("Error inside renderTrainingTab:", e);
     }
-}
 
     // Fullscreen Expansion Listeners for Training Planner Tab
     const expandPlanBtn = document.getElementById("expand-plan-btn");
